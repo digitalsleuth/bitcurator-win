@@ -522,11 +522,13 @@ namespace BitCuratorWIN
                     includeTool.Append("include:\n");
                     includeTool.Append($"  - bitcurator.repos\n");
                     includeTool.Append($"  - bitcurator.config\n");
+                    includeTool.Append($"  - bitcurator.packages.python3\n");
                     requireTool.Append($"{repo}-custom-states:\n");
                     requireTool.Append("  test.nop:\n");
                     requireTool.Append("    - require:\n");
                     requireTool.Append($"      - sls: bitcurator.repos\n");
                     requireTool.Append($"      - sls: bitcurator.config\n");
+                    requireTool.Append($"      - sls: bitcurator.packages.python3\n");
                     if (wslInstall || themedInstall)
                     {
                         includeTool.Append($"  - bitcurator.theme.{repo}.computer-name\n");
