@@ -21,6 +21,6 @@
             </Grid.ColumnDefinitions>
         </Grid>
         <Button x:Name="ShowLogFile" Content="Open Log Files" HorizontalAlignment="Center" Margin="0,0,140,0" VerticalAlignment="Center" Grid.Row="2" Grid.Column="0" Width="105" Height="24" Click="OpenLogFiles" />
-        <Button x:Name="ErrorDetails" Content="Diplay Log Errors" HorizontalAlignment="Center" Margin="140,0,0,0" VerticalAlignment="Center" Grid.Row="2" Grid.Column="1" Width="105" Height="24" Click="DisplayLogErrors" />
+        <Button x:Name="ErrorDetails" Content="Display Log Errors" HorizontalAlignment="Center" Margin="140,0,0,0" VerticalAlignment="Center" Grid.Row="2" Grid.Column="1" Width="105" Height="24" Click="DisplayLogErrors" />
     </Grid>
 </Window>
