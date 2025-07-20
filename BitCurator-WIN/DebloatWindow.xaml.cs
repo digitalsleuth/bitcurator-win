@@ -1,5 +1,4 @@
-﻿using Microsoft.Win32;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
@@ -9,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Microsoft.Win32;
 
 namespace BitCuratorWIN
 {
@@ -17,7 +17,8 @@ namespace BitCuratorWIN
     /// </summary>
     public partial class DebloatWindow : Window
     {
-        private static readonly string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0";
+        private static readonly string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+        private static readonly string debloatJson = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/bitcurator/config/debloat.json";
         public DebloatWindow()
         {
             InitializeComponent();
@@ -201,7 +202,7 @@ namespace BitCuratorWIN
                 List<RadioButton> radioButtons = MainWindow.GetLogicalChildCollection<RadioButton>((DependencyObject)tabItem.Content);
                 // Find all RadioButton controls in each TabItem, which are in Grids, so we need to enumerate the Content
                 // Sets / shows the default options if debloat is not chosen.
-                foreach (RadioButton radioButton in radioButtons) 
+                foreach (RadioButton radioButton in radioButtons)
                 {
                     foreach (string setting in DebloatSettings.DefaultOptions!)
                     {
@@ -235,8 +236,8 @@ namespace BitCuratorWIN
                 CancellationTokenSource cancellationToken = new(new TimeSpan(0, 0, 200));
                 HttpClient httpClient = new();
                 httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                string uri = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/bitcurator/config/debloat.json";
-                jsonData = await httpClient.GetFromJsonAsync<List<TabItems>>(uri, cancellationToken.Token);
+                jsonData = await httpClient.GetFromJsonAsync<List<TabItems>>(debloatJson, cancellationToken.Token);
+                cancellationToken.Dispose();
             }
             catch (HttpRequestException)
             {
@@ -278,7 +279,7 @@ namespace BitCuratorWIN
         {
             try
             {
-                string themeColourBlue = "#FF1644B9";
+                string themeColourBlue = "#7EB4EA";
                 string themeColourRed = "#FFCB393B";
                 Color colourBlue = (Color)ColorConverter.ConvertFromString(themeColourBlue);
                 Color colourRed = (Color)ColorConverter.ConvertFromString(themeColourRed);
@@ -298,25 +299,19 @@ namespace BitCuratorWIN
                     {
                         int numFunctions = function.Value.Options!.Length;
                         string functionContent = function.Value.RadioButtonContents!;
-
-                        // Create a GroupBox to store the RadioButtons
                         GroupBox groupBox = new()
                         {
                             Header = function.Key,
                             Foreground = themeBrushRed,
-                            Width = 360,
+                            Width = 300,
                             HorizontalAlignment = HorizontalAlignment.Center,
                             BorderBrush = Brushes.CornflowerBlue
 
                         };
-
-                        // Create a base StackPanel for the RadioButtons
                         StackPanel radioButtonPanel = new()
                         {
                             Orientation = Orientation.Horizontal
                         };
-                        // Create a for loop for the functions and create a radio button for them
-
                         for (int i = 0; i <= numFunctions - 1; i++)
                         {
                             RadioButton optionRadioButton = new()
@@ -327,21 +322,16 @@ namespace BitCuratorWIN
                             };
 
                             radioButtonPanel.Children.Add(optionRadioButton);
-                        };
+                        }
+                        ;
                         RadioButton doNothingRadioButton = new()
                         {
                             Content = "None",
                             Name = "None",
                             GroupName = function.Key
                         };
-
-                        // Add RadioButtons to the StackPanel
                         radioButtonPanel.Children.Add(doNothingRadioButton);
-
-                        // Add the StackPanel to the GroupBox
                         groupBox.Content = radioButtonPanel;
-
-                        // Add the GroupBox to the main StackPanel
                         if (groupNumber <= numGroupsPerPanel)
                         {
                             stackName0.Children.Add(groupBox);
@@ -358,7 +348,6 @@ namespace BitCuratorWIN
                     foreach (TabItem tabItem in Tabs.Items)
                     {
                         List<RadioButton> radioButtons = MainWindow.GetLogicalChildCollection<RadioButton>((DependencyObject)tabItem.Content);
-                        // Find all RadioButton controls in each TabItem, which are in Grids, so we need to enumerate the Content
                         foreach (string setting in DebloatSettings.Selections)
                         {
                             foreach (RadioButton radioButton in radioButtons)

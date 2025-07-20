@@ -1,5 +1,4 @@
-﻿using Microsoft.Win32;
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,8 +7,8 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Net.NetworkInformation;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -21,10 +20,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Threading;
-
+using Microsoft.Win32;
 
 namespace BitCuratorWIN
 {
@@ -33,11 +31,25 @@ namespace BitCuratorWIN
     /// </summary>
     public partial class MainWindow : Window
     {
-        private readonly TextBoxOutputter outputter;
-        private static DispatcherTimer? elapsedTimer;
+        private static readonly DispatcherTimer? elapsedTimer = new();
         private static readonly Stopwatch? stopWatch = new();
         private static string customThemeZip = "";
-        private static readonly string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0";
+        private static readonly string runningUser = WindowsIdentity.GetCurrent().Name.Split("\\")[1];
+        private static readonly string currentHostname = Environment.MachineName;
+        private static readonly string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+        private static readonly string saltPath = @$"C:\ProgramData\Salt Project\Salt\srv\salt";
+        private static readonly string src = "bitcurator";
+        private static readonly string displayName = "BitCurator-WIN";
+        private static readonly string githubApi = "https://api.github.com/repos/digitalsleuth/bitcurator-win-salt/releases/latest";
+        private static readonly string githubTags = "https://github.com/digitalsleuth/bitcurator-win-salt/archive/refs/tags";
+        private static readonly string githubReleaseDownload = "https://github.com/digitalsleuth/bitcurator-win-salt/releases/download";
+        private static readonly string githubBinaryApi = $@"https://api.github.com/repos/digitalsleuth/bitcurator-win/releases/latest";
+        private static readonly string githubBinaryReleaseDownload = "https://github.com/digitalsleuth/bitcurator-win/releases/download";
+        private static readonly string githubBinaryRepo = "https://github.com/digitalsleuth/bitcurator-win";
+        private static readonly string toolListPdf = "https://github.com/digitalsleuth/bitcurator-win-salt/raw/main/bitcurator/files/BitCurator-Tool-List.pdf";
+        private static readonly string configFile = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/.config";
+        private static readonly string layoutFile = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/{src}/config/layout/layout.json";
+        private static readonly string themeTemplateZip = "https://github.com/digitalsleuth/bitcurator-win/raw/refs/heads/main/blank-template.zip";
 #pragma warning disable CS8602 // Deference of a possibly null reference.
         private static readonly Version? appVersion = new(Assembly.GetExecutingAssembly().GetName().Version.ToString(3));
 #pragma warning restore CS8602 // Deference of a possibly null reference.
@@ -45,11 +57,23 @@ namespace BitCuratorWIN
         {
             InitializeComponent();
             DataContext = this;
-            mainWindow.Title = $"BitCurator Installer for Windows v{appVersion}";
-            outputter = new TextBoxOutputter(OutputConsole);
-            Console.SetOut(outputter);
-            elapsedTimer = new DispatcherTimer();
-            elapsedTimer.Tick += new EventHandler(ElapsedTime!);
+            mainWindow.Title = $"{displayName} v{appVersion}";
+            if (currentHostname.Length >= 15)
+            {
+                HostNamePlaceholder.FontSize = 10;
+            }
+            else if (currentHostname.Length >= 10 && currentHostname.Length < 15)
+            {
+                HostNamePlaceholder.FontSize = 11;
+            }
+            else
+            {
+                HostNamePlaceholder.FontSize = 12;
+            }
+            HostNamePlaceholder.Text = currentHostname;
+            UserNamePlaceholder.Text = runningUser;
+            Console.SetOut(new TextBoxOutputter(OutputConsole));
+            elapsedTimer!.Tick += new EventHandler(ElapsedTime!);
             elapsedTimer.Interval = TimeSpan.FromSeconds(1);
             CommandBindings.Add(new CommandBinding(KeyboardShortcuts.LoadFile, (sender, e) => { FileLoad(); }, (sender, e) => { e.CanExecute = true; }));
             InputBindings.Add(new KeyBinding(KeyboardShortcuts.LoadFile, new KeyGesture(Key.L, ModifierKeys.Control)));
@@ -73,10 +97,14 @@ namespace BitCuratorWIN
             InputBindings.Add(new KeyBinding(KeyboardShortcuts.ToolList, new KeyGesture(Key.T, ModifierKeys.Control | ModifierKeys.Shift)));
             CommandBindings.Add(new CommandBinding(KeyboardShortcuts.LocalLayout, (sender, e) => { _ = LocalLayout(); }, (sender, e) => { e.CanExecute = true; }));
             InputBindings.Add(new KeyBinding(KeyboardShortcuts.LocalLayout, new KeyGesture(Key.L, ModifierKeys.Control | ModifierKeys.Shift)));
+            CommandBindings.Add(new CommandBinding(KeyboardShortcuts.SaveConsole, (sender, e) => { SaveConsoleOutput(sender, e); }, (sender, e) => { e.CanExecute = true; }));
+            InputBindings.Add(new KeyBinding(KeyboardShortcuts.SaveConsole, new KeyGesture(Key.S, ModifierKeys.Control | ModifierKeys.Shift)));
+            CommandBindings.Add(new CommandBinding(KeyboardShortcuts.ResultsOutput, (sender, e) => { ResultsButton_Click(sender, e); }, (sender, e) => { e.CanExecute = true; }));
+            InputBindings.Add(new KeyBinding(KeyboardShortcuts.ResultsOutput, new KeyGesture(Key.R, ModifierKeys.Control | ModifierKeys.Shift)));
             OutputExpander.Visibility = Visibility.Visible;
             OutputExpander.IsEnabled = true;
             OutputExpander.IsExpanded = false;
-            var buildTree = GenerateTree();
+            _ = GenerateTree();
         }
 
         public static class KeyboardShortcuts
@@ -95,6 +123,8 @@ namespace BitCuratorWIN
                 ClearConsole = new RoutedCommand("ClearConsole", typeof(MainWindow));
                 ToolList = new RoutedCommand("ToolList", typeof(MainWindow));
                 LocalLayout = new RoutedCommand("LocalLayout", typeof(MainWindow));
+                SaveConsole = new RoutedCommand("SaveConsoleOutput", typeof(MainWindow));
+                ResultsOutput = new RoutedCommand("ResultsOutput", typeof(MainWindow));
             }
             public static RoutedCommand LoadFile { get; private set; }
             public static RoutedCommand SaveFile { get; private set; }
@@ -107,33 +137,36 @@ namespace BitCuratorWIN
             public static RoutedCommand ClearConsole { get; private set; }
             public static RoutedCommand ToolList { get; private set; }
             public static RoutedCommand LocalLayout { get; private set; }
+            public static RoutedCommand SaveConsole { get; private set; }
+            public static RoutedCommand ResultsOutput { get; private set; }
         }
-        public class TextBoxOutputter : TextWriter
+
+        public partial class TextBoxOutputter(TextBox output) : TextWriter
         // Idea for the TextBoxOutputter from https://social.technet.microsoft.com/wiki/contents/articles/12347.wpf-howto-add-a-debugoutput-console-to-your-application.aspx
         {
-            readonly TextBox textBox;
-            public TextBoxOutputter(TextBox output)
+            private readonly TextBox textBox = output;
+
+            public override void Write(string? value)
             {
-                textBox = output;
-            }
-            public override void Write(char value)
-            {
-                base.Write(value);
-                textBox.Dispatcher.BeginInvoke(new Action(async () =>
+                if (string.IsNullOrEmpty(value)) return;
+
+                textBox.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                 {
-                    textBox.AppendText(value.ToString());
-                    await Task.Delay(100);
-                    textBox.Focus();
+                    textBox.AppendText(value);
                     textBox.CaretIndex = textBox.Text.Length;
                     textBox.ScrollToEnd();
                     textBox.IsReadOnly = true;
                 }));
             }
-            public override Encoding Encoding
+
+            public override void WriteLine(string? value)
             {
-                get { return Encoding.UTF8; }
+                Write(value + Environment.NewLine);
             }
+
+            public override Encoding Encoding => Encoding.UTF8;
         }
+
         public static IEnumerable<T> FindVisualChildren<T>(DependencyObject depObj) where T : DependencyObject
             // Loop through Visual objects and find children of the item to perform operations
         {
@@ -148,7 +181,7 @@ namespace BitCuratorWIN
         }
         public static List<T> GetLogicalChildCollection<T>(object parent) where T : DependencyObject
         {
-            List<T> logicalCollection = new();
+            List<T> logicalCollection = [];
             GetLogicalChildCollection((DependencyObject)parent, logicalCollection);
             return logicalCollection;
         }
@@ -158,9 +191,8 @@ namespace BitCuratorWIN
             IEnumerable children = LogicalTreeHelper.GetChildren(parent);
             foreach (object child in children)
             {
-                if (child is DependencyObject)
+                if (child is DependencyObject depChild)
                 {
-                    DependencyObject? depChild = child as DependencyObject;
                     if (child is T t)
                     {
                         logicalCollection.Add(t);
@@ -169,23 +201,23 @@ namespace BitCuratorWIN
                 }
             }
         }
-
-        public class CheckNetworkConnection
+        public static class CheckNetworkConnection
         {
-            [DllImport("wininet.dll")]
-            private extern static bool InternetGetConnectedState(out int description, int reservedValue);
             public static bool IsConnected()
             {
-                return InternetGetConnectedState(out _, 0);
+                // Return true if any network interface is up and not a loopback or tunnel
+                return NetworkInterface.GetAllNetworkInterfaces()
+                    .Any(ni =>
+                        ni.OperationalStatus == OperationalStatus.Up &&
+                        ni.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                        ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel);
             }
         }
         private void ElapsedTime(object source, EventArgs e)
         {
-
             TimeSpan timeSpan = stopWatch!.Elapsed;
             string elapsedTime = String.Format("{0:00}:{1:00}:{2:00}", timeSpan.Hours, timeSpan.Minutes, timeSpan.Seconds);
             TimerLabel.Content = elapsedTime;
-
         }
         private void VisitGithub(object sender, RequestNavigateEventArgs e)
         // Visits the digitalsleuth/bitcurator-win GitHub Repo
@@ -201,6 +233,13 @@ namespace BitCuratorWIN
                 ConsoleOutput($"[ERROR] Unable to launch process:\n{ex}");
             }
         }
+
+        public static HttpClient NewHttpClient()
+        {
+            HttpClient httpClient = new();
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+            return httpClient;
+        }
         private void ExpandAllBtn(object sender, RoutedEventArgs e)
         {
             ExpandAll();
@@ -214,6 +253,7 @@ namespace BitCuratorWIN
                 {
                     ti.IsExpanded = true;
                 }
+                ExpandCollapseTextBox.Text = "Collapse All";
             }
             catch (Exception ex)
             {
@@ -234,6 +274,7 @@ namespace BitCuratorWIN
                 {
                     treeItem.IsExpanded = false;
                 }
+                ExpandCollapseTextBox.Text = "Expand All";
             }
             catch (Exception ex)
             {
@@ -252,22 +293,35 @@ namespace BitCuratorWIN
             {
                 foreach (CheckBox checkBox in GetLogicalChildCollection<CheckBox>(AllTools))
                 {
-                    if (checkBox.IsEnabled == true)
+                    if (checkBox.IsEnabled)
                     {
                         checkBox.IsChecked = false;
-                    }
-                    else
-                    {
-                        continue;
                     }
                 }
             }
             catch (Exception ex)
             {
                 OutputExpander.IsExpanded = true;
-                ConsoleOutput($"[ERROR] Unable to UnCheck All:\n{ex}");
+                ConsoleOutput($"[ERROR] Unable to Uncheck All:\n{ex}");
             }
         }
+
+        private void CheckUncheckAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (CheckUncheckTextBox.Text == "Check All")
+            {
+                CheckAll();
+                CheckUncheckTextBox.Text = "Uncheck All";
+                CheckUncheckTextBox.Focus();
+            }
+            else if (CheckUncheckTextBox.Text == "Uncheck All")
+            {
+                UncheckAll();
+                CheckUncheckTextBox.Text = "Check All";
+                CheckUncheckTextBox.Focus();
+            }
+        }
+
         private void CheckAllBtn(object sender, RoutedEventArgs e)
         {
             CheckAll();
@@ -279,13 +333,9 @@ namespace BitCuratorWIN
             {
                 foreach (CheckBox checkBox in GetLogicalChildCollection<CheckBox>(AllTools))
                 {
-                    if (checkBox.IsEnabled == true)
+                    if (checkBox.IsEnabled)
                     {
                         checkBox.IsChecked = true;
-                    }
-                    else
-                    {
-                        continue;
                     }
                 }
             }
@@ -295,6 +345,7 @@ namespace BitCuratorWIN
                 ConsoleOutput($"[ERROR] Unable to Check All:\n{ex}");
             }
         }
+
         private void FileSaveClick(object sender, RoutedEventArgs e)
         {
             FileSave();
@@ -305,7 +356,7 @@ namespace BitCuratorWIN
             try
             {
                 bool isThemed = themed.IsChecked == true;
-                bool wslInstall = wsl.IsChecked == true;
+                bool wslInstall = WSL.IsChecked == true;
                 string allTools = GenerateState("install", isThemed, wslInstall);
                 SaveFileDialog saveFileDialog = new()
                 {
@@ -339,8 +390,8 @@ namespace BitCuratorWIN
                     string file = openFile.FileName;
                     ExpandAll();
                     UncheckAll();
-                    List<string> listedTools = new();
-                    
+                    List<string> listedTools = [];
+
                     OutputExpander.IsExpanded = true;
                     ConsoleOutput($"Loading configuration from {file}");
                     int includeLineNumber = FindLineNumber(customState, "include:");
@@ -348,7 +399,7 @@ namespace BitCuratorWIN
                     for (int lineNumber = includeLineNumber + 1; lineNumber < (nopLineNumber - 2); lineNumber++)
                     {
                         string line = customState[lineNumber];
-                        line = line.Replace("  - bitcurator.", "");
+                        line = line.Replace($"  - {src}.", "");
                         if (line.Contains('.'))
                         {
                             line = line.Replace('.', '_');
@@ -373,7 +424,7 @@ namespace BitCuratorWIN
                         }
                     }
                     List<CheckBox> allCheckBoxes = GetLogicalChildCollection<CheckBox>(AllTools);
-                    List<string> checkBoxNames = new();
+                    List<string> checkBoxNames = [];
                     foreach (CheckBox checkBox in allCheckBoxes)
                     {
                         checkBoxNames.Add(checkBox.Name);
@@ -391,7 +442,7 @@ namespace BitCuratorWIN
                         if (!checkBoxNames.Contains(tool))
                         {
                             OutputExpander.IsExpanded = true;
-                            ConsoleOutput($"{tool} is not, or is no longer, an available option - please check your custom state and try again. To continue using your custom state without this tool, simply remove the two lines containing that tool - one under the \"include\" heading, and one under the \"bitcurator-custom-states\" heading.");
+                            ConsoleOutput($"{tool} is not, or is no longer, an available option - please check your custom state and try again. To continue using your custom state without this tool, simply remove the two lines containing that tool - one under the \"include\" heading, and one under the \"{src}-custom-states\" heading.");
                         }
                     }
                 }
@@ -408,19 +459,19 @@ namespace BitCuratorWIN
         }
         private void EnableTheme(object sender, RoutedEventArgs e)
         {
-            Theme.IsEnabled = true;
             Theme.Text = "BitCurator";
-            HostName.Visibility = Visibility.Visible;
-            //HostNameLabel.Visibility = Visibility.Visible;
+            Theme.IsEnabled = true;
             HostName.Text = null;
+            HostName.IsEnabled = true;
+            HostNameLabel.IsEnabled = true;
         }
         private void DisableTheme(object sender, RoutedEventArgs e)
         {
-            Theme.IsEnabled = false;
             Theme.Text = null;
-            HostName.Visibility = Visibility.Hidden;
-            //HostNameLabel.Visibility = Visibility.Hidden;
+            Theme.IsEnabled = false;
             HostName.Text = null;
+            HostName.IsEnabled = false;
+            HostNameLabel.IsEnabled = false;
         }
         public static class ThemeChoices
         {
@@ -448,7 +499,7 @@ namespace BitCuratorWIN
             {
                 OpenFileDialog openFile = new()
                 {
-                    Filter = "BitCurator Theme Zip | *.zip"
+                    Filter = $"{displayName} Theme Zip | *.zip"
                 };
                 if (openFile.ShowDialog() == true)
                 {
@@ -469,7 +520,7 @@ namespace BitCuratorWIN
         private static bool ExtractCustomTheme(string zipFile)
         {
             bool extractStatus = false;
-            string themePath = @"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\theme\";
+            string themePath = @$"{saltPath}\{src}\theme\";
             string themeName = "custom-theme";
             string themeFolder = Path.Join(themePath, themeName);
             try
@@ -520,21 +571,19 @@ namespace BitCuratorWIN
                 if (stateType == "install")
                 {
                     includeTool.Append("include:\n");
-                    includeTool.Append($"  - bitcurator.repos\n");
-                    includeTool.Append($"  - bitcurator.config\n");
-                    includeTool.Append($"  - bitcurator.packages.python3\n");
+                    includeTool.Append($"  - {src}.repos\n");
                     requireTool.Append($"{repo}-custom-states:\n");
                     requireTool.Append("  test.nop:\n");
                     requireTool.Append("    - require:\n");
-                    requireTool.Append($"      - sls: bitcurator.repos\n");
-                    requireTool.Append($"      - sls: bitcurator.config\n");
-                    requireTool.Append($"      - sls: bitcurator.packages.python3\n");
+                    requireTool.Append($"      - sls: {src}.repos\n");
                     if (wslInstall || themedInstall)
                     {
-                        includeTool.Append($"  - bitcurator.theme.{repo}.computer-name\n");
-                        includeTool.Append($"  - bitcurator.config.debloat-windows\n");
-                        requireTool.Append($"      - sls: bitcurator.theme.{repo}.computer-name\n");
-                        requireTool.Append($"      - sls: bitcurator.config.debloat-windows\n");
+                        includeTool.Append($"  - {src}.config\n");
+                        includeTool.Append($"  - {src}.theme.{repo}.computer-name\n");
+                        includeTool.Append($"  - {src}.config.debloat-windows\n");
+                        requireTool.Append($"      - sls: {src}.config\n");
+                        requireTool.Append($"      - sls: {src}.theme.{repo}.computer-name\n");
+                        requireTool.Append($"      - sls: {src}.config.debloat-windows\n");
                     }
                 }
                 else if (stateType == "download")
@@ -546,13 +595,13 @@ namespace BitCuratorWIN
                 }
                 foreach (string tool in allChecked)
                 {
-                    int underScoreIndex = tool.IndexOf("_");
-                    if (tool.Split("_")[0] == "python")
+                    int underScoreIndex = tool.IndexOf('_');
+                    if (tool.Split("_")[0] == "python3")
                     {
                         if (stateType == "install")
                         {
                             string pythonTool = tool.Remove(underScoreIndex, "_".Length).Insert(underScoreIndex, "-");
-                            int secondUnderScoreIndex = pythonTool.IndexOf("_");
+                            int secondUnderScoreIndex = pythonTool.IndexOf('_');
                             string pythonVal = pythonTool.Remove(secondUnderScoreIndex, "_".Length).Insert(secondUnderScoreIndex, ".");
                             states.Add(pythonVal);
                         }
@@ -568,8 +617,14 @@ namespace BitCuratorWIN
                     else
                     {
                         string notPythonVal = tool.Remove(underScoreIndex, "_".Length).Insert(underScoreIndex, ".");
-                        states.Add(notPythonVal);
-                    
+                        if (stateType == "download" && (notPythonVal == "installers.windbg" || notPythonVal == "installers.windows_sandbox"))
+                        {
+                            continue;
+                        }
+                        else
+                        {
+                            states.Add(notPythonVal);
+                        }
                     }
                 }
                 foreach (string selection in states)
@@ -577,30 +632,30 @@ namespace BitCuratorWIN
                     if (stateType == "install")
                     {
                         string result = selection.Replace("_", "-");
-                        includeTool.Append($"  - bitcurator.{result}\n");
-                        requireTool.Append($"      - sls: bitcurator.{result}\n");
+                        includeTool.Append($"  - {src}.{result}\n");
+                        requireTool.Append($"      - sls: {src}.{result}\n");
                     }
                     else if (stateType == "download")
                     {
                         string result = selection.Replace("_", "-");
-                        includeTool.Append($"  - bitcurator.downloads.{result}\n");
-                        requireTool.Append($"      - sls: bitcurator.downloads.{result}\n");
+                        includeTool.Append($"  - {src}.downloads.{result}\n");
+                        requireTool.Append($"      - sls: {src}.downloads.{result}\n");
                     }
                 }
                 if (themedInstall)
                 {
-                    includeTool.Append($"  - bitcurator.theme.{repo}\n");
-                    requireTool.Append($"      - sls: bitcurator.theme.{repo}\n");
+                    includeTool.Append($"  - {src}.theme.{repo}\n");
+                    requireTool.Append($"      - sls: {src}.theme.{repo}\n");
                 }
                 if (stateType == "install")
                 {
-                    includeTool.Append($"  - bitcurator.cleanup\n");
-                    requireTool.Append($"      - sls: bitcurator.cleanup\n");
+                    includeTool.Append($"  - {src}.cleanup\n");
+                    requireTool.Append($"      - sls: {src}.cleanup\n");
                 }
                 if (wslInstall && stateType == "install")
                 {
-                    includeTool.Append($"  - bitcurator.wsl\n");
-                    requireTool.Append($"      - sls: bitcurator.wsl\n");
+                    includeTool.Append($"  - {src}.wsl\n");
+                    requireTool.Append($"      - sls: {src}.wsl\n");
                 }
                 string include_tools = includeTool.ToString() + "\n";
                 string require_tools = requireTool.ToString().TrimEnd('\n');
@@ -616,7 +671,6 @@ namespace BitCuratorWIN
         }
         public (List<string>, List<string>) GetCheckStatus()
         // Identify the status of all checkboxes - also adds the ability to grab the proper name for the tool
-        // The checkedItems_content is not yet in use, but is setup for future use under ToolList
         {
             List<string> checkedItems = [];
             List<string> checkedItemsContent = [];
@@ -638,10 +692,10 @@ namespace BitCuratorWIN
                         }
                     }
                 }
-                if (wsl.IsChecked == true)
+                if (WSL.IsChecked == true)
                 {
-                    checkedItems.Add(wsl.Name.ToString());
-                    checkedItemsContent.Add(wsl.Content.ToString()!);
+                    checkedItems.Add(WSL.Name.ToString());
+                    checkedItemsContent.Add(WSL.Content.ToString()!);
                 }
                 if (themed.IsChecked == true)
                 {
@@ -720,7 +774,7 @@ namespace BitCuratorWIN
 
         }
         private async void InstallClick(object sender, RoutedEventArgs e)
-        // The main function for determining the status of all fields and initiating the installation of the BitCurator environment
+        // The main function for determining the status of all fields and initiating the installation of the selected environment
         {
             try
             {
@@ -734,7 +788,7 @@ namespace BitCuratorWIN
                     ConsoleOutput("[ERROR] No network connection detected - Please check your network connection and try the Install process again.");
                     return;
                 }
-                else 
+                else
                 {
                     OutputExpander.IsExpanded = true;
                     ConsoleOutput("Network connection detected, continuing...");
@@ -768,13 +822,12 @@ namespace BitCuratorWIN
                     return;
                 }
                 OutputExpander.IsExpanded = true;
-                ConsoleOutput($"BitCurator-WIN v{appVersion}");
+                ConsoleOutput($"{displayName} v{appVersion}");
                 string driveLetter = Path.GetPathRoot(path: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))!;
-                string distro = "BitCurator";
+                string distro;
                 string repo;
                 bool isThemed;
-                string currentUser = Environment.UserName;
-
+                string currentUser = runningUser;
                 string standalonesPath;
                 string userName;
                 bool wslSelected;
@@ -786,7 +839,6 @@ namespace BitCuratorWIN
                 string? gitHash = softwareConfig[0].Software!["Git"].SoftwareHash!;
                 string? saltVersion = softwareConfig[0].Software!["SaltStack"].SoftwareVersion!;
                 string? saltHash = softwareConfig[0].Software!["SaltStack"].SoftwareHash!;
-
                 if (themed.IsChecked == true)
                 {
                     isThemed = true;
@@ -798,11 +850,11 @@ namespace BitCuratorWIN
                     isThemed = false;
                     ConsoleOutput($"No theme has been selected.");
                 }
-                if (wsl.IsChecked == true)
+                if (WSL.IsChecked == true)
                 {
                     wslSelected = true;
-                    MessageBoxResult result = MessageBox.Show("WSLv2 installation will require a reboot! Ensure that you save any open documents, then click OK to continue.","WSLv2 requires a reboot!",MessageBoxButton.OKCancel,MessageBoxImage.Warning);
-                    if (result == MessageBoxResult.Cancel) 
+                    MessageBoxResult result = MessageBox.Show("WSL installation will require a reboot! Ensure that you save any open documents, then click OK to continue.", "WSL requires a reboot!", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                    if (result == MessageBoxResult.Cancel)
                     {
                         return;
                     }
@@ -828,10 +880,10 @@ namespace BitCuratorWIN
                 }
                 else
                 {
-                    standalonesPath = @"C:\standalone";
+                    standalonesPath = @$"C:\standalone";
                     ConsoleOutput($"Standalones path box was empty - default will be used - {standalonesPath}");
                 }
-                string tempDir = @$"{driveLetter}bitcurator-temp\";
+                string tempDir = @$"{driveLetter}{src}-temp\";
                 List<string>? currentReleaseData = await IdentifyRelease();
                 string releaseVersion = currentReleaseData![0];
                 string uriZip = currentReleaseData[1];
@@ -875,7 +927,7 @@ namespace BitCuratorWIN
                 {
                     ConsoleOutput($"{releaseFile} and {releaseFile}.sha256 already exist and not zero-byte files.");
                     ConsoleOutput("Comparing hashes...");
-                    providedHash = File.ReadAllText($"{tempDir}{releaseVersion}.zip.sha256").ToLower().Split(" ")[0];
+                    providedHash = (await File.ReadAllTextAsync($"{tempDir}{releaseVersion}.zip.sha256")).ToLower().Split(" ")[0];
                     hashMatch = CompareHash(providedHash, releaseFile);
                     if (hashMatch)
                     {
@@ -899,7 +951,7 @@ namespace BitCuratorWIN
                     }
                     ConsoleOutput("Downloads complete...");
                     ConsoleOutput("Comparing hashes...");
-                    providedHash = File.ReadAllText($"{tempDir}{releaseVersion}.zip.sha256").ToLower().Split(" ")[0];
+                    providedHash = (await File.ReadAllTextAsync($"{tempDir}{releaseVersion}.zip.sha256")).ToLower().Split(" ")[0];
                     hashMatch = CompareHash(providedHash, releaseFile);
                     if (hashMatch)
                     {
@@ -913,9 +965,9 @@ namespace BitCuratorWIN
                     }
                 }
                 ConsoleOutput("Checking for and removing previous repo folder");
-                if (Directory.Exists(@"C:\ProgramData\Salt Project\Salt\srv\salt\win\"))
+                if (Directory.Exists(@$"{saltPath}\win\"))
                 {
-                    ManageDirectory(@"C:\ProgramData\Salt Project\Salt\srv\salt\win\", "delete");
+                    ManageDirectory(@$"{saltPath}\win\", "delete");
                 }
                 string stateFile = GenerateState("install", isThemed, wslSelected);
                 statesExtracted = ExtractStates(tempDir, releaseVersion);
@@ -923,20 +975,25 @@ namespace BitCuratorWIN
                 {
                     if (debloatOptions is not null)
                     {
-                        File.WriteAllText(@"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\config\debloat.preset", string.Join("\n", debloatOptions));
+                        await File.WriteAllTextAsync(@$"{saltPath}\{src}\config\debloat.preset", string.Join("\n", debloatOptions));
                     }
-
                     if (isThemed)
                     {
                         string layout = await GenerateLayout(standalonesPath);
-                        File.WriteAllText(@$"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\config\layout\BitCurator-StartLayout.xml", layout);
-                        if (ThemeChoices.SelectedTheme == "Custom" && customThemeZip != "") 
+                        await File.WriteAllTextAsync(@$"{saltPath}\{src}\config\layout\BitCurator-StartLayout.xml", layout);
+                        if (ThemeChoices.SelectedTheme == "Custom" && customThemeZip != "")
                         {
                             ExtractCustomTheme(customThemeZip);
                         }
                         if (HostName.Text != "")
                         {
                             hostName = HostName.Text;
+                            repo = Theme.Name;
+                            InsertHostName(hostName, repo);
+                        }
+                        else
+                        {
+                            hostName = currentHostname;
                             repo = Theme.Name;
                             InsertHostName(hostName, repo);
                         }
@@ -949,7 +1006,7 @@ namespace BitCuratorWIN
                     else
                     {
                         await ExecuteSaltStack(userName, standalonesPath, releaseVersion);
-                        File.WriteAllText(@"C:\bitcurator-version", releaseVersion);
+                        await File.WriteAllTextAsync(@$"C:\{src}-version", releaseVersion);
                     }
                 }
                 if (wslSelected)
@@ -1003,6 +1060,7 @@ namespace BitCuratorWIN
                 const string uninstallkey64 = @"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Git_is1";
                 string version32 = (string)Registry.GetValue($@"{localMachine}\{uninstallkey32}", "DisplayVersion", null)!;
                 string version64 = (string)Registry.GetValue($@"{localMachine}\{uninstallkey64}", "DisplayVersion", null)!;
+                gitVersion = gitVersion.Split(".windows")[0];
                 if (version32 == gitVersion || version64 == gitVersion)
                 {
                     gitInstalled = true;
@@ -1024,16 +1082,13 @@ namespace BitCuratorWIN
         {
             try
             {
-                HttpClient httpClient = new();
-                {
-                    httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                }
+                HttpClient httpClient = NewHttpClient();
                 HttpResponseMessage response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 ConsoleOutput($"Response code {(int)response.StatusCode} - {response.StatusCode}");
                 response.EnsureSuccessStatusCode();
                 HttpContent content = response.Content;
                 var fileBytes = await content.ReadAsByteArrayAsync();
-                File.WriteAllBytes(downloadLocation, fileBytes);
+                await File.WriteAllBytesAsync(downloadLocation, fileBytes);
                 return true;
             }
             catch (HttpRequestException requestException)
@@ -1101,7 +1156,6 @@ namespace BitCuratorWIN
             catch (Exception ex)
             {
                 ConsoleOutput($"[ERROR] Unable to download SaltStack:\n{ex}");
-                return;
             }
         }
         private static async Task InstallSaltStack(string tempDir, string saltVersion)
@@ -1139,9 +1193,10 @@ namespace BitCuratorWIN
         private static async Task DownloadGit(string tempDir, string gitVersion, string gitHash)
         // Downloads the pre-determined version of Git
         {
-            string gitFile = $"Git-{gitVersion}-64-bit.exe";
-            gitVersion = gitVersion.Split(".")[0] + "." + gitVersion.Split(".")[1] + "." + gitVersion.Split(".")[2];
-            string uri = $"https://github.com/git-for-windows/git/releases/download/v{gitVersion}.windows.2/{gitFile}";
+            string coreVersion = gitVersion.Split(".windows")[0];
+            string winVersion = gitVersion.Split(".windows")[1];
+            string gitFile = $"Git-{coreVersion}-64-bit.exe";
+            string uri = $"https://github.com/git-for-windows/git/releases/download/v{coreVersion}.windows{winVersion}/{gitFile}";
             try
             {
                 if (!Directory.Exists(tempDir))
@@ -1169,7 +1224,7 @@ namespace BitCuratorWIN
                         File.Delete($"{tempDir}{gitFile}");
                     }
                 }
-                ConsoleOutput($"Downloading Git v{gitVersion}");
+                ConsoleOutput($"Downloading Git v{coreVersion}");
                 bool status = await FileDownload(uri, $"{tempDir}{gitFile}");
                 if (!status)
                 {
@@ -1187,12 +1242,12 @@ namespace BitCuratorWIN
             catch (Exception ex)
             {
                 ConsoleOutput($"[ERROR] Unable to download git:\n{ex}");
-                return;
             }
         }
         private static async Task InstallGit(string tempDir, string gitVersion)
         // Installs the pre-determined version of Git, provided it can be downloaded, or is available in the tempDir
         {
+            gitVersion = gitVersion.Split(".windows")[0];
             try
             {
                 ConsoleOutput($"Installing Git {gitVersion}");
@@ -1224,24 +1279,24 @@ namespace BitCuratorWIN
             }
         }
         private static async Task<List<string>> IdentifyRelease()
-        // Identifies the most recent release of the bitcurator-salt states for installation
+        // Identifies the most recent release of the salt states for installation
         {
-            List<string> releaseData = new();
+            List<string> releaseData = [];
             try
             {
                 CancellationTokenSource cancellationToken = new(new TimeSpan(0, 0, 200));
-                HttpClient httpClient = new();
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                string uri = $@"https://api.github.com/repos/digitalsleuth/bitcurator-win-salt/releases/latest";
+                HttpClient httpClient = NewHttpClient();
+                string uri = $@"{githubApi}";
                 var result = await httpClient.GetAsync(uri, cancellationToken.Token);
                 string data = result.Content.ReadAsStringAsync().Result;
                 var jsonData = JsonDocument.Parse(data);
                 var release = (jsonData.RootElement.GetProperty("tag_name")).ToString();
-                string releaseFile = $"https://github.com/digitalsleuth/bitcurator-win-salt/archive/refs/tags/{release}.zip";
-                string releaseHash = $"https://github.com/digitalsleuth/bitcurator-win-salt/releases/download/{release}/bitcurator-win-salt-{release}.zip.sha256";
+                string releaseFile = $"{githubTags}/{release}.zip";
+                string releaseHash = $"{githubReleaseDownload}/{release}/{src}-salt-{release}.zip.sha256";
                 releaseData.Add(release);
                 releaseData.Add(releaseFile);
                 releaseData.Add(releaseHash);
+                cancellationToken.Dispose();
             }
             catch (Exception ex)
             {
@@ -1250,7 +1305,7 @@ namespace BitCuratorWIN
             return releaseData;
         }
         private static async Task<bool> DownloadStates(string tempDir, string currentRelease, string uriZip, string uriHash)
-        // Downloads the latest bitcurator-win-salt states
+        // Downloads the latest salt states
         {
             try
             {
@@ -1331,26 +1386,26 @@ namespace BitCuratorWIN
             return match;
         }
         private static bool ExtractStates(string tempDir, string release)
-        // Once downloaded, or available, this will extract the bitcurator-win-salt states to the required location in the Salt Project\Salt folder
+        // Once downloaded, or available, this will extract the salt states to the required location in the Salt Project\Salt folder
         {
             bool extracted = false;
             try
             {
                 string file = $"{tempDir}{release}.zip";
-                string saltPath = @"C:\ProgramData\Salt Project\Salt\";
-                if (!Directory.Exists($"{saltPath}srv"))
+                string saltBase = @"C:\ProgramData\Salt Project\Salt\";
+                if (!Directory.Exists($"{saltBase}srv"))
                 {
-                    ManageDirectory($"{saltPath}srv", "create");
-                    ManageDirectory($@"{saltPath}srv\salt\", "create");
-                    saltPath = $@"{saltPath}srv\salt\";
+                    ManageDirectory($"{saltBase}srv", "create");
+                    ManageDirectory($@"{saltBase}srv\salt\", "create");
+                    saltBase = $@"{saltBase}srv\salt\";
                 }
                 else
                 {
-                    saltPath = @"C:\ProgramData\Salt Project\Salt\srv\salt\";
+                    saltBase = @$"{saltPath}\";
                 }
                 string shortRelease = release.TrimStart('v');
-                string distroFolder = $@"{tempDir}bitcurator-win-salt-{shortRelease}\bitcurator";
-                string distroDest = $@"{saltPath}bitcurator";
+                string distroFolder = $@"{tempDir}{src}-salt-{shortRelease}\{src}";
+                string distroDest = $@"{saltBase}{src}";
                 ConsoleOutput($"Extracting {file} to {tempDir}");
                 ZipFile.ExtractToDirectory(file, tempDir, true);
                 ConsoleOutput($"Moving {distroFolder} folder to {distroDest}");
@@ -1370,13 +1425,13 @@ namespace BitCuratorWIN
 
         private static void InsertHostName(string hostName, string repo)
         {
-            string hostnameState = $@"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\theme\{repo}\computer-name.sls";
+            string hostnameState = $@"{saltPath}\{src}\theme\{repo}\computer-name.sls";
             try
             {
                 if (File.Exists(hostnameState))
                 {
                     string allText = File.ReadAllText(hostnameState);
-                    allText = allText.Replace("BitCurator", hostName);
+                    allText = allText.Replace("BitCurator-WIN", hostName);
                     File.WriteAllText(hostnameState, allText);
                     ConsoleOutput($"Chosen hostname {hostName} written to computer-name.sls");
                 }
@@ -1384,7 +1439,6 @@ namespace BitCuratorWIN
             catch (Exception ex)
             {
                 ConsoleOutput($"[ERROR] Unable to write the selected hostname to computer-name.sls:\n{ex}");
-                return;
             }
         }
         private static bool CopyCustomState(string stateFile)
@@ -1393,13 +1447,13 @@ namespace BitCuratorWIN
             bool copied = false;
             try
             {
-                File.WriteAllText(@$"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\custom.sls", stateFile);
-                ConsoleOutput($"Custom state custom.sls copied to the SaltStack bitcurator directory");
+                File.WriteAllText(@$"{saltPath}\{src}\custom.sls", stateFile);
+                ConsoleOutput($"Custom state custom.sls copied to the SaltStack {src} directory");
                 copied = true;
             }
             catch (Exception ex)
             {
-                ConsoleOutput($"[ERROR] Unable to copy the custom state to the SaltStack bitcurator directory:\n{ex}");
+                ConsoleOutput($"[ERROR] Unable to copy the custom state to the SaltStack {src} directory:\n{ex}");
             }
             return copied;
         }
@@ -1424,7 +1478,7 @@ namespace BitCuratorWIN
                     MessageBox.Show("No items selected! Choose at least one item to download.", "No items selected!", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
-                else if ((checkedItems.Count == 1) && (checkedItems.Contains("themed") || checkedItems.Contains("wsl")))
+                if ((checkedItems.Count == 1) && (checkedItems.Contains("themed") || checkedItems.Contains("wsl")))
                 {
                     string item = char.ToUpper(checkedItems[0][0]) + checkedItems[0][1..];
                     if (item == "Wsl")
@@ -1437,7 +1491,7 @@ namespace BitCuratorWIN
                     }
                     return;
                 }
-                else if ((checkedItems.Count == 2) && (checkedItems.Contains("themed") && checkedItems.Contains("wsl")))
+                if ((checkedItems.Count == 2) && (checkedItems.Contains("themed") && checkedItems.Contains("wsl")))
                 {
                     (string item0, string item1) = (checkedItems[0], checkedItems[1]);
                     item0 = char.ToUpper(item0[0]) + item0[1..];
@@ -1447,10 +1501,10 @@ namespace BitCuratorWIN
                     return;
                 }
                 OutputExpander.IsExpanded = true;
-                ConsoleOutput($"BitCurator-WIN v{appVersion}");
+                ConsoleOutput($"{displayName} v{appVersion}");
                 string driveLetter = Path.GetPathRoot(path: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))!;
                 string stateList = GenerateState("download", false, false);
-                string tempDir = $@"{driveLetter}bitcurator-temp\";
+                string tempDir = $@"{driveLetter}{src}-temp\";
                 List<string>? currentReleaseData = await IdentifyRelease();
                 string releaseVersion = currentReleaseData![0];
                 string uriZip = currentReleaseData[1];
@@ -1463,7 +1517,7 @@ namespace BitCuratorWIN
                 string? saltHash = softwareConfig[0].Software!["SaltStack"].SoftwareHash!;
                 if (DownloadsPath.Text == "")
                 {
-                    downloadPath = @"C:\bc-downloads\";
+                    downloadPath = @$"C:\{src}-downloads\";
                 }
                 else
                 {
@@ -1502,13 +1556,13 @@ namespace BitCuratorWIN
                 string providedHash;
                 bool hashMatch;
                 Environment.GetEnvironmentVariable("PATH");
-                ConsoleOutput($"Current release of BitCurator-WIN is {releaseVersion}");
+                ConsoleOutput($"Current release of BitCurator is {releaseVersion}");
                 FileInfo releaseFileFileInfo = new(releaseFile);
                 FileInfo releaseHashFileInfo = new($"{releaseFile}.sha256");
                 if ((File.Exists(releaseFile) && File.Exists($"{releaseFile}.sha256")) && (releaseFileFileInfo.Length != 0 && releaseHashFileInfo.Length != 0))
                 {
                     ConsoleOutput($"{releaseFile} and {releaseFile}.sha256 already exist and not zero-byte files.");
-                    providedHash = File.ReadAllText($"{tempDir}{releaseVersion}.zip.sha256").ToLower().Split(" ")[0];
+                    providedHash = (await File.ReadAllTextAsync($"{tempDir}{releaseVersion}.zip.sha256")).ToLower().Split(" ")[0];
                     hashMatch = CompareHash(providedHash, releaseFile);
                     if (hashMatch)
                     {
@@ -1532,7 +1586,7 @@ namespace BitCuratorWIN
                     }
                     ConsoleOutput("Downloads complete...");
                     ConsoleOutput("Comparing hashes...");
-                    providedHash = File.ReadAllText($"{tempDir}{releaseVersion}.zip.sha256").ToLower().Split(" ")[0];
+                    providedHash = (await File.ReadAllTextAsync($"{tempDir}{releaseVersion}.zip.sha256")).ToLower().Split(" ")[0];
                     hashMatch = CompareHash(providedHash, releaseFile);
                     if (hashMatch)
                     {
@@ -1548,16 +1602,16 @@ namespace BitCuratorWIN
                 bool extracted = ExtractStates(tempDir, releaseVersion);
                 if (extracted)
                 {
-                    ConsoleOutput($@"State files extracted, writing bitcurator\downloads\init.sls");
-                    File.WriteAllText($@"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\downloads\init.sls", stateList);
+                    ConsoleOutput($@"State files extracted, writing {src}\downloads\init.sls");
+                    await File.WriteAllTextAsync(@$"{saltPath}\{src}\downloads\init.sls", stateList);
                 }
-                if (File.Exists($@"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\downloads\init.sls"))
+                if (File.Exists(@$"{saltPath}\{src}\downloads\init.sls"))
                 {
                     await ExecuteSaltStackDownloads(releaseVersion, downloadPath);
                 }
                 else
                 {
-                    ConsoleOutput($@"bitcurator\downloads\init.sls not found, aborting!");
+                    ConsoleOutput($@"{src}\downloads\init.sls not found, aborting!");
                     return;
                 }
                 stopWatch?.Stop();
@@ -1566,6 +1620,14 @@ namespace BitCuratorWIN
             catch (Exception ex)
             {
                 ConsoleOutput($"[ERROR] Unable to complete the Download process:\n{ex}");
+            }
+        }
+
+        private static void HandleProcessOutput(string? data)
+        {
+            if (!string.IsNullOrWhiteSpace(data))
+            {
+                Application.Current.Dispatcher.Invoke(() => ConsoleOutput(data));
             }
         }
 
@@ -1580,7 +1642,7 @@ namespace BitCuratorWIN
             string gitPath = $@"{envPath};C:\Program Files\Git\cmd";
             ProcHandled = new TaskCompletionSource<bool>();
             string saltExe = @"C:\Program Files\Salt Project\Salt\salt-call.exe";
-            string args = $"-l info --local --retcode-passthrough --state-output=mixed state.sls bitcurator.custom pillar=\"{{ 'bitcurator_user': '{userName}', 'inpath': '{standalonesPath}'}}\" --out-file=\"C:\\bitcurator-saltstack-{release}.log\" --out-file-append --log-file=\"C:\\bitcurator-saltstack-{release}.log\" --log-file-level=debug";
+            string args = $"-l info --local --retcode-passthrough --state-output=mixed state.sls {src}.custom pillar=\"{{ '{src}_user': '{userName}', 'inpath': '{standalonesPath}'}}\" --out-file=\"C:\\{src}-saltstack-{release}.log\" --out-file-append --log-file=\"C:\\{src}-saltstack-{release}.log\" --log-file-level=debug";
             using (saltproc = new Process()
             {
                 EnableRaisingEvents = true,
@@ -1589,11 +1651,11 @@ namespace BitCuratorWIN
                     FileName = saltExe,
                     Arguments = args,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = false
+                    CreateNoWindow = true
                 },
             })
-                
             {
                 try
                 {
@@ -1601,31 +1663,30 @@ namespace BitCuratorWIN
                     {
                         ConsoleOutput(
                             $"Installing the selected states.\n" +
+                            $"Log File: C:\\{src}-saltstack-{release}.log\n" +
                             $"Executing: salt call with the following variables\n" +
-                            $"  -l info --local\n" +
-                            $"  --retcode-passthrough\n" +
-                            $"  --state-output=mixed\n" +
-                            $"  state.sls\n" +
-                            $"  bitcurator.custom\n" +
-                            $"  pillar=\"{{ 'bitcurator_user': '{userName}', 'inpath': '{standalonesPath}'}}\"\n" +
-                            $"  --out-file=\"C:\\bitcurator-saltstack-{release}.log\"\n" +
-                            $"  --out-file-append\n" +
-                            $"  --log-file=\"C:\\bitcurator-saltstack-{release}.log\"\n" +
-                            $"  --log-file-level=debug\n"
+                            $"  {src}.custom\n" +
+                            $"  {{ '{src}_user': '{userName}', 'inpath': '{standalonesPath}'}}\n"
                             );
-                        saltproc.Exited += new EventHandler(InstallExited);
+                        saltproc.Exited += new EventHandler(ProcessExited);
                         if (!envPath.Contains(@"C:\Program Files\Git\cmd"))
                         {
                             saltproc.StartInfo.EnvironmentVariables["PATH"] = gitPath;
                         }
+                        saltproc.OutputDataReceived += (s, e) => HandleProcessOutput(e.Data);
+                        saltproc.ErrorDataReceived += (s, e) => HandleProcessOutput(e.Data);
+                        saltproc.EnableRaisingEvents = true;
+                        StopButton.IsEnabled = true;
+                        StopButton.Visibility = Visibility.Visible;
                         saltproc.Start();
-                        Task readOutput = saltproc.StandardOutput.ReadToEndAsync();
-                        await readOutput;
-                        if (saltproc.HasExited && saltproc.ExitCode != 0)
+                        saltproc.BeginOutputReadLine();
+                        saltproc.BeginErrorReadLine();
+                        await saltproc.WaitForExitAsync();
+                        if (saltproc.ExitCode != 0)
                         {
-                            ConsoleOutput("Installation has completed with errors.");
+                            ConsoleOutput("Installation has ended with errors.");
                         }
-                        else if (saltproc.HasExited && saltproc.ExitCode == 0)
+                        else
                         {
                             ConsoleOutput("Installation has completed successfully.");
                         }
@@ -1639,6 +1700,35 @@ namespace BitCuratorWIN
                 await Task.WhenAny(ProcHandled.Task, Task.Delay(10000));
             }
         }
+        public void StopSaltStack_Click(object sender, RoutedEventArgs e)
+        {
+            if (saltproc != null && !saltproc.HasExited)
+            {
+                try
+                {
+                    saltproc.Kill(true);
+                    saltproc.WaitForExit();
+                    ConsoleOutput("SaltStack was terminated.");
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutput($"[ERROR] Failed to kill SaltStack: {ex.Message}");
+                }
+            }
+            if (wslproc != null && !wslproc.HasExited)
+            {
+                try
+                {
+                    wslproc.Kill(true);
+                    wslproc.WaitForExit();
+                    ConsoleOutput("SaltStack was terminated.");
+                }
+                catch (Exception ex)
+                {
+                    ConsoleOutput($"[ERROR] Failed to kill SaltStack: {ex.Message}");
+                }
+            }
+        }
         private async Task ExecuteSaltStackDownloads(string release, string downloadPath)
         // Generate a salt-call.exe process with the required argument to simply download the selected files
         {
@@ -1646,7 +1736,7 @@ namespace BitCuratorWIN
             string envPath = Environment.GetEnvironmentVariable("Path")!;
             string gitPath = $@"{envPath};C:\Program Files\Git\cmd";
             string saltExe = @"C:\Program Files\Salt Project\Salt\salt-call.exe";
-            string args = $"-l info --local --retcode-passthrough --state-output=mixed state.sls bitcurator.downloads pillar=\"{{ 'downloads': '{downloadPath}'}}\" --out-file=\"C:\\bitcurator-saltstack-downloads-{release}.log\" --out-file-append --log-file=\"C:\\bitcurator-saltstack-downloads-{release}.log\" --log-file-level=debug";
+            string args = $"-l info --local --retcode-passthrough --state-output=mixed state.sls {src}.downloads pillar=\"{{ 'downloads': '{downloadPath}'}}\" --out-file=\"C:\\{src}-saltstack-downloads-{release}.log\" --out-file-append --log-file=\"C:\\{src}-saltstack-downloads-{release}.log\" --log-file-level=debug";
             using (saltproc = new Process()
             {
                 EnableRaisingEvents = true,
@@ -1655,8 +1745,9 @@ namespace BitCuratorWIN
                     FileName = saltExe,
                     Arguments = args,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = false
+                    CreateNoWindow = true
                 },
             })
             {
@@ -1666,33 +1757,32 @@ namespace BitCuratorWIN
                     {
                         ConsoleOutput(
                             $"Installing the selected states.\n" +
+                            $"Log File: C:\\{src}-saltstack-downloads-{release}.log\n" +
                             $"Executing: salt call with the following variables\n" +
-                            $"  -l info --local\n" +
-                            $"  --retcode-passthrough\n" +
-                            $"  --state-output=mixed\n" +
-                            $"  state.sls\n" +
-                            $"  bitcurator.downloads\n" +
-                            $"  pillar=\"{{ 'downloads': '{downloadPath}'}}\"\n" +
-                            $"  --out-file=\"C:\\bitcurator-saltstack-downloads-{release}.log\"\n" +
-                            $"  --out-file-append\n" +
-                            $"  --log-file=\"C:\\bitcurator-saltstack-downloads-{release}.log\"\n" +
-                            $"  --log-file-level=debug"
+                            $"  {src}.downloads\n" +
+                            $"  {{ 'downloads': '{downloadPath}'}}\n"
                             );
-                        saltproc.Exited += new EventHandler(DownloadExited);
+                        saltproc.Exited += new EventHandler(ProcessExited);
                         if (!envPath.Contains(@"C:\Program Files\Git\cmd"))
                         {
                             saltproc.StartInfo.EnvironmentVariables["PATH"] = gitPath;
                         }
+                        saltproc.OutputDataReceived += (s, e) => HandleProcessOutput(e.Data);
+                        saltproc.ErrorDataReceived += (s, e) => HandleProcessOutput(e.Data);
+                        saltproc.EnableRaisingEvents = true;
+                        StopButton.IsEnabled = true;
+                        StopButton.Visibility = Visibility.Visible;
                         saltproc.Start();
-                        Task readOutput = saltproc.StandardOutput.ReadToEndAsync();
-                        await readOutput;
-                        if (saltproc.HasExited && saltproc.ExitCode != 0)
+                        saltproc.BeginOutputReadLine();
+                        saltproc.BeginErrorReadLine();
+                        await saltproc.WaitForExitAsync();
+                        if (saltproc.ExitCode != 0)
                         {
-                            ConsoleOutput("Download process has completed with errors.");
+                            ConsoleOutput("Installation has ended with errors.");
                         }
-                        else if (saltproc.HasExited && saltproc.ExitCode == 0)
+                        else
                         {
-                            ConsoleOutput("Download process has completed successfully.");
+                            ConsoleOutput("Installation has completed successfully.");
                         }
                     }
                 }
@@ -1704,7 +1794,7 @@ namespace BitCuratorWIN
                 await Task.WhenAny(ProcHandled.Task, Task.Delay(10000));
             }
         }
-        private async void InstallExited(object? sender, EventArgs e)
+        private async void ProcessExited(object? sender, EventArgs e)
         // An Event Handler for tracking the ExecuteSaltStack and ExecuteSaltStackDownloads functions
         {
             if (sender is Process proc)
@@ -1720,30 +1810,11 @@ namespace BitCuratorWIN
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Unable to display exit details: {ex}","Unable to display exit details", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"Unable to display exit details: {ex}", "Unable to display exit details", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
-        private async void DownloadExited(object? sender, EventArgs e)
-        // An Event Handler for tracking the ExecuteSaltStack and ExecuteSaltStackDownloads functions
-        {
-            if (sender is Process proc)
-            {
-                try
-                {
-                    await proc.WaitForExitAsync();
-                    ConsoleOutput(
-                    $"\nExited\t\t: {proc.ExitTime}\n" +
-                    $"Exit code \t: {proc.ExitCode}\n" +
-                    $"Elapsed time\t: {Math.Round((proc.ExitTime - proc.StartTime).TotalMilliseconds)}");
-                    ProcHandled?.TrySetResult(true);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Unable to display out exit details: {ex}", "Unable to display exit details", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-            }
-        }
+
         private async Task ExecuteWsl(string userName, string release, string standalonesPath, bool waitForSalt)
         // A salt-call.exe process used for the installation of the Windows Subsystem for Linux v2 environment
         {
@@ -1751,7 +1822,7 @@ namespace BitCuratorWIN
             string envPath = Environment.GetEnvironmentVariable("Path")!;
             string gitPath = $@"{envPath};C:\Program Files\Git\cmd";
             string saltExe = @"C:\Program Files\Salt Project\Salt\salt-call.exe";
-            string args = $"-l info --local --retcode-passthrough --state-output=mixed state.sls bitcurator.wsl pillar=\"{{ 'bitcurator_user': '{userName}', 'inpath': '{standalonesPath}'}}\" --out-file=\"C:\\bitcurator-saltstack-{release}-wsl.log\" --out-file-append --log-file=\"C:\\bitcurator-saltstack-{release}-wsl.log\" --log-file-level=debug";
+            string args = $"-l info --local --retcode-passthrough --state-output=mixed state.sls {src}.wsl pillar=\"{{ '{src}_user': '{userName}', 'inpath': '{standalonesPath}'}}\" --out-file=\"C:\\{src}-saltstack-{release}-wsl.log\" --out-file-append --log-file=\"C:\\{src}-saltstack-{release}-wsl.log\" --log-file-level=debug";
             using (wslproc = new Process()
             {
                 EnableRaisingEvents = true,
@@ -1760,8 +1831,9 @@ namespace BitCuratorWIN
                     FileName = saltExe,
                     Arguments = args,
                     RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = false
+                    CreateNoWindow = true
                 },
             })
             {
@@ -1771,23 +1843,16 @@ namespace BitCuratorWIN
                     {
                         if (waitForSalt)
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-                        { 
+                        {
                             await Task.WhenAny(ProcHandled.Task);
                         }
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
                         ConsoleOutput(
-                           $"Installing WSLv2.\n" +
+                           $"Installing WSL.\n" +
+                           $"Log File: C:\\{src}-saltstack-{release}-wsl.log\n" +
                            $"Executing: salt call with the following variables\n" +
-                           $"  -l info --local\n" +
-                           $"  --retcode-passthrough\n" +
-                           $"  --state-output=mixed\n" +
-                           $"  state.sls\n" +
-                           $"  bitcurator.wsl\n" +
-                           $"  pillar=\"{{ 'bitcurator_user': '{userName}', 'inpath': '{standalonesPath}'}}\"\n" +
-                           $"  --out-file=\"C:\\bitcurator-saltstack-{release}-wsl.log\"\n" +
-                           $"  --out-file-append\n" +
-                           $"  --log-file=\"C:\\bitcurator-saltstack-{release}-wsl.log\"\n" +
-                           $"  --log-file-level=debug\n"
+                           $"  {src}.wsl\n" +
+                           $"  {{ '{src}_user': '{userName}', 'inpath': '{standalonesPath}'}}\n"
                            );
                         wslproc.Exited += new EventHandler(WslProcessExited);
                         if (!envPath.Contains(@"C:\Program Files\Git\cmd"))
@@ -1796,22 +1861,28 @@ namespace BitCuratorWIN
                         }
                         ConsoleOutput("Saving Console Output before beginning WSL installation");
                         SaveConsoleOutput("wsl", null);
+                        wslproc.OutputDataReceived += (s, e) => HandleProcessOutput(e.Data);
+                        wslproc.ErrorDataReceived += (s, e) => HandleProcessOutput(e.Data);
+                        wslproc.EnableRaisingEvents = true;
+                        StopButton.IsEnabled = true;
+                        StopButton.Visibility = Visibility.Visible;
                         wslproc.Start();
-                        Task readOutput = wslproc.StandardOutput.ReadToEndAsync();
-                        await readOutput;
-                        if (wslproc.HasExited && wslproc.ExitCode != 0)
+                        wslproc.BeginOutputReadLine();
+                        wslproc.BeginErrorReadLine();
+                        await wslproc.WaitForExitAsync();
+                        if (wslproc.ExitCode != 0)
                         {
-                            ConsoleOutput("WSL installation has completed with errors.");
+                            ConsoleOutput("Installation has ended with errors.");
                         }
-                        else if (wslproc.HasExited && wslproc.ExitCode == 0)
+                        else
                         {
-                            ConsoleOutput("WSL installation has completed successfully.");
+                            ConsoleOutput("Installation has completed successfully.");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    ConsoleOutput($"[ERROR] Unable to execute WSLv2 install:\n{ex}");
+                    ConsoleOutput($"[ERROR] Unable to execute WSL install:\n{ex}");
                     return;
                 }
                 await Task.WhenAny(wslHandled.Task, Task.Delay(10000));
@@ -1853,13 +1924,13 @@ namespace BitCuratorWIN
                     ConsoleOutput("[ERROR] No network connection detected - Please check your network connection and try the WSL Only option again.");
                     return;
                 }
-                MessageBoxResult result = MessageBox.Show("WSLv2 installation will require a reboot! Ensure that you save any open documents, then click OK to continue.", "WSLv2 requires a reboot!", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+                MessageBoxResult result = MessageBox.Show("WSL installation will require a reboot! Ensure that you save any open documents, then click OK to continue.", "WSL requires a reboot!", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
                 if (result == MessageBoxResult.Cancel)
                 {
                     return;
                 }
                 OutputExpander.IsExpanded = true;
-                ConsoleOutput($"BitCurator-WIN v{appVersion}");
+                ConsoleOutput($"{displayName} v{appVersion}");
                 string driveLetter = Path.GetPathRoot(path: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))!;
                 string distro;
                 string userName;
@@ -1889,11 +1960,10 @@ namespace BitCuratorWIN
                 }
                 else
                 {
-                    standalonesPath = @"C:\standalone";
+                    standalonesPath = @$"C:\standalone";
                     ConsoleOutput($"Standalones path box was empty - default will be used - {standalonesPath}");
                 }
-                string distroFile = distro.ToLower().Replace("-", "");
-                string tempDir = @$"{driveLetter}bitcurator-temp\";
+                string tempDir = @$"{driveLetter}{src}-temp\";
                 List<string>? currentReleaseData = await IdentifyRelease();
                 string releaseVersion = currentReleaseData![0];
                 string uriZip = currentReleaseData[1];
@@ -1941,7 +2011,7 @@ namespace BitCuratorWIN
                 if (File.Exists(releaseFile) && File.Exists($"{releaseFile}.sha256"))
                 {
                     ConsoleOutput($"{releaseFile} and {releaseFile}.sha256 already exist!\nComparing hashes...");
-                    providedHash = File.ReadAllText($"{tempDir}{releaseVersion}.zip.sha256").ToLower().Split(" ")[0];
+                    providedHash = (await File.ReadAllTextAsync($"{tempDir}{releaseVersion}.zip.sha256")).ToLower().Split(" ")[0];
                     hashMatch = CompareHash(providedHash, releaseFile);
                     if (hashMatch)
                     {
@@ -1965,7 +2035,7 @@ namespace BitCuratorWIN
                     }
                     ConsoleOutput("Downloads complete...");
                     ConsoleOutput("Comparing hashes...");
-                    providedHash = File.ReadAllText($"{tempDir}{releaseVersion}.zip.sha256").ToLower().Split(" ")[0];
+                    providedHash = (await File.ReadAllTextAsync($"{tempDir}{releaseVersion}.zip.sha256")).ToLower().Split(" ")[0];
                     hashMatch = CompareHash(providedHash, releaseFile);
                     if (hashMatch)
                     {
@@ -1989,7 +2059,7 @@ namespace BitCuratorWIN
             }
             catch (Exception ex)
             {
-                ConsoleOutput($"[ERROR] Unable to execute WSLv2 install:\n{ex}");
+                ConsoleOutput($"[ERROR] Unable to execute WSL install:\n{ex}");
                 return;
             }
         }
@@ -2021,7 +2091,7 @@ namespace BitCuratorWIN
                     {
                         continue;
                     }
-                    else if (checkBox.IsEnabled == false)
+                    else if (!checkBox.IsEnabled)
                     {
                         continue;
                     }
@@ -2050,7 +2120,7 @@ namespace BitCuratorWIN
                     {
                         continue;
                     }
-                    else if (checkBox.IsEnabled == false)
+                    else if (!checkBox.IsEnabled)
                     {
                         continue;
                     }
@@ -2060,74 +2130,68 @@ namespace BitCuratorWIN
                     }
                 }
                 else
-                { 
+                {
                     continue;
                 }
             }
         }
-        private async void SaveConsoleOutput(object sender, RoutedEventArgs? e)
+        private void SaveConsoleOutput(object sender, RoutedEventArgs? e)
         // Saves the TextBox console Output for log analysis or review
         {
-            await Task.Delay(100);
             string dateTimeNow = $"{DateTime.Now:yyyyMMdd-hhmmss}";
             string fileName;
-            if (sender.GetType() == typeof(Button))
+            if ((sender.GetType() == typeof(Button)) || (sender.GetType() == typeof(MenuItem)))
             {
                 if (OutputConsole.Text == "")
                 {
                     MessageBox.Show($"Output Console contains no information - not saving output.", "Output Console Empty!", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     OutputExpander.IsExpanded = false;
-                    return;
                 }
                 else
                 {
-                    fileName = $@"C:\bitcurator-win-output-{dateTimeNow}.log";
+                    fileName = $@"C:\{src}-output-{dateTimeNow}.log";
                     File.WriteAllText(fileName, OutputConsole.Text);
                     MessageBox.Show($"Output Console data saved to {fileName}.", "Output Console Log Saved", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
-            else if (sender.GetType() == typeof(String))
+            else if (sender is string)
             {
                 if (OutputConsole.Text == "")
                 {
                     OutputExpander.IsExpanded = false;
-                    return;
                 }
                 else
                 {
-                    fileName = $@"C:\bitcurator-win-output-{dateTimeNow}-{sender}.log";
+                    fileName = $@"C:\{src}-output-{dateTimeNow}-{sender}.log";
                     File.WriteAllText(fileName, OutputConsole.Text);
                 }
             }
             else
             {
-                fileName = $@"C:\bitcurator-win-output-{dateTimeNow}.log";
+                fileName = $@"C:\{src}-output-{dateTimeNow}.log";
                 File.WriteAllText(fileName, OutputConsole.Text);
             }
         }
         private async void CheckUpdates(object sender, RoutedEventArgs e)
-        // Checks for updates of BitCurator-WIN
+        // Checks for updates of the application
         {
             try
             {
-                List<string> releaseData = new();
                 CancellationTokenSource cancellationToken = new(new TimeSpan(0, 0, 200));
-                HttpClient httpClient = new();
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                string uri = $@"https://api.github.com/repos/digitalsleuth/bitcurator-win/releases/latest";
+                HttpClient httpClient = NewHttpClient();
+                string uri = $@"{githubBinaryApi}";
                 var getRequest = await httpClient.GetAsync(uri, cancellationToken.Token);
                 string data = getRequest.Content.ReadAsStringAsync().Result;
                 var jsonData = JsonDocument.Parse(data);
                 string release = (jsonData.RootElement.GetProperty("tag_name")).ToString();
                 Version releaseTag = new(release.Replace("v", ""));
-                string newRelease = $"https://github.com/digitalsleuth/bitcurator-win/releases/download/{release}/bitcurator-win-{release}.exe";
-                string releaseHash = $"https://github.com/digitalsleuth/bitcurator-win/releases/download/{release}/bitcurator-win-{release}.exe.sha256";
+                string newRelease = $"{githubBinaryReleaseDownload}/{release}/{src}-{release}.exe";
                 if (releaseTag > appVersion)
                 {
                     MessageBoxResult result = MessageBox.Show(
                        $"New version found: {releaseTag}\n" +
                        $"Current version: {appVersion}\n\n" +
-                       $"Would you like to download the new version of BitCurator WIN?", $"New Version Found - {releaseTag}", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                       $"Would you like to download the new version of {displayName}?", $"New Version Found - {releaseTag}", MessageBoxButton.YesNo, MessageBoxImage.Question);
                     if (result == MessageBoxResult.Yes)
                     {
                         Process.Start(new ProcessStartInfo($"{newRelease}") { UseShellExecute = true });
@@ -2135,114 +2199,49 @@ namespace BitCuratorWIN
                 }
                 else if (releaseTag <= appVersion)
                 {
-                    MessageBox.Show($"No new release of BitCurator-WIN found:\n{appVersion} is the most recent release.", "No new release of BitCurator-WIN found", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show($"No new release of {displayName} found:\n{appVersion} is the most recent release.", $"No new release of {displayName} found", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else if (appVersion > releaseTag)
                 {
                     MessageBox.Show($"Lucky you! You're ahead of the times!\nVersion {appVersion} is even newer than the current release!", "Where you're going, you don't need versions..", MessageBoxButton.OK, MessageBoxImage.Asterisk);
                 }
+                cancellationToken.Dispose();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"[ERROR] Unable to identify release:\n{ex}");
             }
         }
-        public (StringBuilder, StringBuilder, StringBuilder, List<string>) ProcessResults(string releaseVersion)
-        {
-            StringBuilder errors = new();
-            StringBuilder results = new();
-            StringBuilder errorIds = new();
-            string logFile = $@"C:\bitcurator-saltstack-{releaseVersion}.log";
-            string downloadLog = $@"C:\bitcurator-saltstack-downloads-{releaseVersion}.log";
-            string wslLog = $@"C:\bitcurator-saltstack-{releaseVersion}-wsl.log";
-            List<string> logfiles = new()
-                {
-                    logFile,
-                    downloadLog,
-                    wslLog
-                };
-            try
-            {
-                foreach (string log in logfiles)
-                {
-                    if (File.Exists(log))
-                    {
-                        string[] contents = File.ReadAllLines(log);
-                        string[] splits = contents[1].Split('[', ']');
-                        string pid = splits[5];
-                        string errorString = $"[ERROR   ][{pid}]";
-                        var ignorable = new[] { "return code: 3010", "retcode: 3010", "Can't parse line", "retcode: 12345", "return code: 12345", $"{errorString} output:", "return code: 128", "fatal: not a git", "retcode: 128" };
-                        results.Append($"{log}\n");
-                        string logResults = ParseLog(contents, "Summary for", 7);
-                        logResults = logResults.Replace("Summary for local\r", "");
-                        logResults = logResults.Replace("------------\r", "");
-                        logResults = logResults.Replace("--Succeeded", "Succeeded");
-                        logResults = logResults.Replace("-Succeeded", "Succeeded");
-                        logResults = logResults.Replace("--Total", "Total");
-                        logResults = logResults.Replace("-Total", "Total");
-                        results.Append(logResults);
-                        results.Append(new string('-', 50) + "\n");
-                        errors.Append($"{log}\n");
-                        string error = ParseLog(contents, $"{errorString}", 1);
-                        foreach (string line in error.Split("\n"))
-                        {
-                            if (ignorable.Any(x => line.Contains(x)))
-                            {
-                                continue;
-                            }
-                            else
-                            {
-                                string newLine = line.Replace(@"\r\n", "\n");
-                                errors.Append(newLine);
-                            }
-                        }
-                        errors.Append(new string('-', 50) + "\n");
-                        string idResults = ParseLog(contents, "ID: ", 8);
-                        errorIds.Append(idResults);
-                    }
-                }
-            }
-            catch (IOException)
-            {
-                ConsoleOutput($"One or more log files are being used by another process.");
-            }
-            catch (Exception ex)
-            {
-                OutputExpander.IsExpanded = true;
-                ConsoleOutput($"Unable to access logs:\n{ex}");
-            }
-            return (results, errors, errorIds, logfiles);
-        }
-        private void ResultsButton(object sender, RoutedEventArgs e)
+
+        private void ResultsButton_Click(object sender, RoutedEventArgs e)
         // Parses the available logs for the SaltStack and WSL installs to determine its summary
         {
-            string versionFileSalt = @"C:\ProgramData\Salt Project\Salt\srv\salt\bitcurator\VERSION";
-            string versionFileLocal = @"C:\bitcurator-version";
+            string versionFileSalt = @$"{saltPath}\{src}\VERSION";
+            string versionFileLocal = @$"C:\{src}-version";
             try
             {
                 string releaseVersion = "";
-                if (File.Exists(versionFileSalt))
-                {
-                    releaseVersion = File.ReadAllText($"{versionFileSalt}").TrimEnd();
-                }
-                else if (File.Exists(versionFileLocal))
+                if (File.Exists(versionFileLocal))
                 {
                     releaseVersion = File.ReadAllText($"{versionFileLocal}").TrimEnd();
                 }
+                else if (File.Exists(versionFileSalt))
+                {
+                    releaseVersion = File.ReadAllText($"{versionFileSalt}").TrimEnd();
+                }
+
                 else
                 {
                     throw new FileNotFoundException("VERSION files not found");
                 }
-                (StringBuilder results, StringBuilder errors, StringBuilder errorIds, List<string> logfiles) = ProcessResults(releaseVersion);
-                int linesInResults = results.ToString().Split('\r').Length;
-                if (linesInResults < 4)
+                if (!File.Exists(@$"C:\{src}-saltstack-{releaseVersion}.log") && !File.Exists(@$"C:\{src}-saltstack-downloads-{releaseVersion}.log") && !File.Exists(@$"C:\{src}-saltstack-{releaseVersion}-wsl.log"))
                 {
                     MessageBox.Show($"The most recent attempt at installation\nwas for version {releaseVersion}.\n\nNo results were found in the log files,\n or no log file was found for {releaseVersion}.\nIt may have been canceled prematurely.\n\nTry reviewing the log files manually,\n and reach out on GitHub to let us know.", $"No results found for {releaseVersion}", MessageBoxButton.OK, MessageBoxImage.Exclamation);
                     return;
                 }
                 else
                 {
-                    ResultsWindow resultsWindow = new(results, errors, errorIds, logfiles, releaseVersion)
+                    ResultsWindow resultsWindow = new(releaseVersion)
                     {
                         Owner = this
                     };
@@ -2264,14 +2263,14 @@ namespace BitCuratorWIN
         {
             SearchBox.Focus();
         }
- 
+
         private void CheckDistroVersion(object sender, RoutedEventArgs e)
-        // Checks the current environment to see if BitCurator is installed and provide its version
+        // Checks the system to see if the chosen environment is installed and provide its version
         {
             string driveLetter = Path.GetPathRoot(path: Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))!;
             string currentVersion;
             string msgBoxVersion;
-            string versionFile = driveLetter + "bitcurator-version";
+            string versionFile = driveLetter + $"{src}-version";
             if (File.Exists(versionFile))
             {
                 currentVersion = File.ReadAllText(versionFile);
@@ -2282,23 +2281,23 @@ namespace BitCuratorWIN
                 currentVersion = $"not installed.\n" +
                                   $"If you are expecting version information, you may have\n" +
                                   $"encountered errors during your last install attempt.\n\n" +
-                                  $"You can check the log(s) labelled {driveLetter}bitcurator-saltstack-<version>.log";
+                                  $"You can check the log(s) labelled {driveLetter}{src}-saltstack-<version>.log";
                 msgBoxVersion = "not installed.";
             }
-            MessageBox.Show($"BitCurator is {currentVersion}", $"BitCurator {msgBoxVersion}", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"{displayName} is {currentVersion}", $"{displayName} {msgBoxVersion}", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         private void ShowAbout(object sender, RoutedEventArgs e)
         // Shows the About box
         {
             MessageBoxResult result = MessageBox.Show(
-                $"BitCurator-WIN v{appVersion}\n" +
+                $"{displayName} v{appVersion}\n" +
                 $"Author: Corey Forman (digitalsleuth)\n" +
-                $"Source: https://github.com/digitalsleuth/bitcurator-win\n\n" +
+                $"Source: {githubBinaryRepo}\n\n" +
                 $"Would you like to visit the repo on GitHub?",
-                $"BitCurator-WIN v{appVersion}", MessageBoxButton.YesNoCancel, MessageBoxImage.Information);
+                $"{displayName} v{appVersion}", MessageBoxButton.YesNoCancel, MessageBoxImage.Information);
             if (result == MessageBoxResult.Yes)
             {
-                Process.Start(new ProcessStartInfo($"https://github.com/digitalsleuth/bitcurator-win") { UseShellExecute = true });
+                Process.Start(new ProcessStartInfo($"{githubBinaryRepo}") { UseShellExecute = true });
             }
         }
         public static int FindLineNumber(string[] content, string searchTerm)
@@ -2309,7 +2308,7 @@ namespace BitCuratorWIN
         public static List<int> Find_AllLineNumbers(string[] content, string searchTerm)
         // Used to identify all line numbers within the given content for the provided searchTerm
         {
-            List<int> lineNumbers = new();
+            List<int> lineNumbers = [];
             for (int i = 0; i < content.Length; i++)
             {
                 if (content[i].Contains(searchTerm))
@@ -2320,47 +2319,21 @@ namespace BitCuratorWIN
             }
             return lineNumbers;
         }
-        private static string ParseLog(string[] contents, string searchText, int context)
-        // The function for actually parsing the log file provided and searching for the given text
-        {
-            StringBuilder summary = new();
-            string output;
-            try
-            {
-                List<int> lineNumbers = Find_AllLineNumbers(contents, searchText);
-                foreach (int number in lineNumbers)
-                {
-                    for (int line = number; line < (number + context); line++)
-                    {
-                        summary.Append($"{contents[line].TrimStart().TrimEnd()}\r");
-                    }
-                    if (searchText == "ID: ")
-                    {
-                        summary.Append("----------\n");
-                    }
-                    else
-                    {
-                        summary.Append('\n');
-                    }
-                }
-                output = summary.ToString();
-            }
-            catch (Exception ex)
-            {
-                ConsoleOutput($"Unable to parse the log file contents:\n{ex}");
-                output = $"Unable to parse the log file contents\n";
-            }
-            return output;
-        }
+
         private static void ConsoleOutput(string message)
         // Function to output the given content with a date/time value in front of it for tracking events
         {
             Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}");
         }
         private void DownloadToolList(object sender, RoutedEventArgs e)
-        // Downloads the latest BitCurator Tool List from GitHub which shows all tools and versions available.
+        // Downloads the latest Tool List from GitHub which shows all tools and versions available.
         {
-            Process.Start(new ProcessStartInfo($"https://github.com/digitalsleuth/bitcurator-win-salt/raw/main/BitCurator-Tool-List.pdf") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo($"{toolListPdf}") { UseShellExecute = true });
+        }
+        private void DownloadThemeTemplate(object sender, RoutedEventArgs e)
+        // Downloads the latest Tool List from GitHub which shows all tools and versions available.
+        {
+            Process.Start(new ProcessStartInfo($"{themeTemplateZip}") { UseShellExecute = true });
         }
         private void ToolList()
         // Currently not 'implemented', but will provide the Proper Name for the tools selected
@@ -2375,63 +2348,11 @@ namespace BitCuratorWIN
             try
             {
                 List<string> releaseData = await IdentifyRelease();
-                MessageBox.Show($"The latest version of BitCurator is {releaseData[0]}\nIf you wish to update, simply select your tools\nand click Install", $"{releaseData[0]} is the latest version", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"The latest version of {displayName} is {releaseData[0]}\nIf you wish to update, simply select your tools\nand click Install.", $"{releaseData[0]} is the latest version", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 ConsoleOutput($"[ERROR] Unable to determine the latest version:\n{ex}");
-            }
-        }
-        void OnStandalonesChanged(object sender, TextChangedEventArgs e)
-        {
-            if (StandalonesPath.Text == "")
-            {
-                ImageBrush sbgImageBrush = new()
-                {
-                    ImageSource = new BitmapImage(new Uri("pack://application:,,,/img/standalonesbg.gif", UriKind.Absolute)),
-                    AlignmentX = AlignmentX.Left,
-                    Stretch = Stretch.None
-                };
-                StandalonesPath.Background = sbgImageBrush;
-            }
-            else
-            {
-                StandalonesPath.Background = null;
-            }
-        }
-        void OnDownloadsChanged(object sender, TextChangedEventArgs e)
-        {
-            if (DownloadsPath.Text == "")
-            {
-                ImageBrush dlbgImageBrush = new()
-                {
-                    ImageSource = new BitmapImage(new Uri("pack://application:,,,/img/bcdownloads.gif", UriKind.Absolute)),
-                    AlignmentX = AlignmentX.Left,
-                    Stretch = Stretch.None
-                };
-                DownloadsPath.Background = dlbgImageBrush;
-            }
-            else
-            {
-                DownloadsPath.Background = null;
-            }
-        }
-
-        void OnHostnameChanged(object sender, TextChangedEventArgs e)
-        {
-            if (HostName.Text == "")
-            {
-                ImageBrush dlbgImageBrush = new()
-                {
-                    ImageSource = new BitmapImage(new Uri("pack://application:,,,/img/hostname.gif", UriKind.Absolute)),
-                    AlignmentX = AlignmentX.Left,
-                    Stretch = Stretch.None
-                };
-                HostName.Background = dlbgImageBrush;
-            }
-            else
-            {
-                HostName.Background = null;
             }
         }
 
@@ -2498,62 +2419,44 @@ namespace BitCuratorWIN
                     var tools = jsonQuery[i].Tools;
                     foreach (var item in tools!)
                     {
-                        string cbName = item.Value.CbName!;
-                        if (checkedItems.Contains(cbName))
+                        var value = item.Value;
+                        string cbName = value.CbName!;
+                        if (!checkedItems.Contains(cbName) || !value.StartMenu)
+                            continue;
+
+                        string? ReplacePath(string? input) => input?.Replace("PLACEHOLDER_PATH", selectedPath);
+
+                        string? BuildTile(string id)
                         {
-                            string tile;
-                            string toolName = item.Key;
-                            string? DAID = item.Value.DAID;
-                            DAID = DAID!.Replace("PLACEHOLDER_PATH", selectedPath);
-                            bool AUMID = item.Value.AUMID;
-                            bool DALP = item.Value.DALP;
-                            bool startMenu = item.Value.StartMenu;
-                            string[]? extraTiles = item.Value.ExtraTiles;
-                            if (AUMID && startMenu)
-                            {
-                                tile = $@"          <start:Tile Size=""1x1"" Column=""{column}"" Row=""{row}"" AppUserModelID=""{DAID}"" />" + '\n';
-                            }
-                            else if (DALP && startMenu)
-                            {
-                                tile = $@"          <start:DesktopApplicationTile Size=""1x1"" Column=""{column}"" Row=""{row}"" DesktopApplicationLinkPath=""{DAID}"" />" + '\n';
-                            }
-                            else if ((!DALP && !AUMID) && startMenu)
-                            {
-                                tile = $@"          <start:DesktopApplicationTile Size=""1x1"" Column=""{column}"" Row=""{row}"" DesktopApplicationID=""{DAID}"" />" + '\n';
-                            }
-                            else
-                            {
-                                continue;
-                            }
-                            xmlOutput.Append(tile);
+                            if (value.AUMID)
+                                return $@"          <start:Tile Size=""1x1"" Column=""{column}"" Row=""{row}"" AppUserModelID=""{id}"" />" + '\n';
+                            if (value.DALP)
+                                return $@"          <start:DesktopApplicationTile Size=""1x1"" Column=""{column}"" Row=""{row}"" DesktopApplicationLinkPath=""{id}"" />" + '\n';
+                            return $@"          <start:DesktopApplicationTile Size=""1x1"" Column=""{column}"" Row=""{row}"" DesktopApplicationID=""{id}"" />" + '\n';
+                        }
+                        string? mainTile = BuildTile(ReplacePath(value.DAID)!);
+                        if (mainTile != null)
+                        {
+                            xmlOutput.Append(mainTile);
                             column++;
-                            if (column > 5)
-                            { column = 0; row++; }
-                            if (extraTiles?.Length > 0)
+                            if (column > 5) { column = 0; row++; }
+                        }
+                        if (value.ExtraTiles?.Length > 0)
+                        {
+                            foreach (var extra in value.ExtraTiles)
                             {
-                                foreach (string extraTile in extraTiles)
+                                if (column > 5) { column = 0; row++; }
+
+                                string? extraTile = BuildTile(ReplacePath(extra)!);
+                                if (extraTile != null)
                                 {
-                                    if (column > 5)
-                                    { row += 1; column = 0; }
-                                    string newTile = extraTile!.Replace("PLACEHOLDER_PATH", selectedPath);
-                                    if (AUMID && startMenu)
-                                    {
-                                        tile = $@"          <start:Tile Size=""1x1"" Column=""{column}"" Row=""{row}"" AppUserModelID=""{newTile}"" />" + '\n';
-                                    }
-                                    else if (DALP && startMenu)
-                                    {
-                                        tile = $@"          <start:DesktopApplicationTile Size=""1x1"" Column=""{column}"" Row=""{row}"" DesktopApplicationLinkPath=""{newTile}"" />" + '\n';
-                                    }
-                                    else if ((!DALP && !AUMID) && startMenu)
-                                    {
-                                        tile = $@"          <start:DesktopApplicationTile Size=""1x1"" Column=""{column}"" Row=""{row}"" DesktopApplicationID=""{newTile}"" />" + '\n';
-                                    }
-                                    xmlOutput.Append(tile);
+                                    xmlOutput.Append(extraTile);
                                     column++;
                                 }
                             }
                         }
                     }
+
                 }
                 else
                 {
@@ -2579,14 +2482,13 @@ namespace BitCuratorWIN
         }
         private async Task<List<ConfigItems>> GetJsonConfig()
         {
-            List<ConfigItems>? jsonConfig = new();
+            List<ConfigItems>? jsonConfig = [];
             try
             {
                 CancellationTokenSource cancellationToken = new(new TimeSpan(0, 0, 200));
-                HttpClient httpClient = new();
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                string uri = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/.config";
-                jsonConfig = await httpClient.GetFromJsonAsync<List<ConfigItems>>(uri, cancellationToken.Token);
+                HttpClient httpClient = NewHttpClient();
+                jsonConfig = await httpClient.GetFromJsonAsync<List<ConfigItems>>(configFile, cancellationToken.Token);
+                cancellationToken.Dispose();
             }
             catch (HttpRequestException)
             {
@@ -2597,15 +2499,13 @@ namespace BitCuratorWIN
         }
         private async Task<List<TreeItems>> GetJsonLayout()
         {
-            List<TreeItems>? jsonData = new();
+            List<TreeItems>? jsonData = [];
             try
             {
                 CancellationTokenSource cancellationToken = new(new TimeSpan(0, 0, 200));
-                HttpClient httpClient = new();
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                string uri = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/bitcurator/config/layout/layout.json";
-                //string uri = $@"http://10.20.10.70:8080/layout.json";
-                jsonData = await httpClient.GetFromJsonAsync<List<TreeItems>>(uri, cancellationToken.Token);
+                HttpClient httpClient = NewHttpClient();
+                jsonData = await httpClient.GetFromJsonAsync<List<TreeItems>>(layoutFile, cancellationToken.Token);
+                cancellationToken.Dispose();
             }
             catch (HttpRequestException)
             {
@@ -2614,19 +2514,20 @@ namespace BitCuratorWIN
             }
             return jsonData!;
         }
+        private readonly Dictionary<TreeViewItem, List<CheckBox>> originalChildOrder = [];
         private async Task GenerateTree()
         {
             bool Connected = CheckNetworkConnection.IsConnected();
             if (!Connected)
             {
-                OutputExpander.IsExpanded= true;
+                OutputExpander.IsExpanded = true;
                 ConsoleOutput("[ERROR] No network connection detected - Please check your network connection and try launching the application again.");
                 return;
             }
             List<TreeItems>? jsonQuery = await GetJsonLayout();
             int count = jsonQuery!.Count;
             for (int i = 0; i < count; i++)
-            {   
+            {
                 string TVI = jsonQuery[i].TVI!;
                 string HEADER = jsonQuery[i].HeaderContent!;
                 string HEADERNAME = jsonQuery[i].HeaderName!;
@@ -2636,6 +2537,7 @@ namespace BitCuratorWIN
                     Content = HEADER,
                     VerticalContentAlignment = VerticalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Top,
+                    IsTabStop = false,
                     IsChecked = true
                 };
                 checkBox.Checked += SectionCheckAll;
@@ -2660,8 +2562,9 @@ namespace BitCuratorWIN
                         IsChecked = tool.Value.Checked,
                         IsEnabled = tool.Value.Enabled
                     };
-
-                    if (toolCheckBox.IsEnabled == false)
+                    toolCheckBox.Checked += ChildCheckChanged;
+                    toolCheckBox.Unchecked += ChildCheckChanged;
+                    if (!toolCheckBox.IsEnabled)
                     {
                         continue;
                     }
@@ -2669,9 +2572,52 @@ namespace BitCuratorWIN
                     {
                         newChild.Items.Add(toolCheckBox);
                     }
+                    if (!originalChildOrder.ContainsKey(newChild))
+                        originalChildOrder[newChild] = [];
+
+                    originalChildOrder[newChild].Add(toolCheckBox);
                 }
             }
         }
+
+        private void ChildCheckChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox childCheckBox)
+                return;
+
+            TreeViewItem? parentItem = FindLogicalParent<TreeViewItem>(childCheckBox);
+            if (parentItem?.Header is not CheckBox parentCheckBox)
+                return;
+            var childCheckBoxes = parentItem.Items.OfType<CheckBox>().ToList();
+            if (childCheckBoxes.Count == 0)
+            {
+                childCheckBoxes = parentItem.Items
+                    .OfType<object>()
+                    .Select(item => item as CheckBox)
+                    .Where(cb => cb != null)
+                    .ToList()!;
+            }
+
+            int total = childCheckBoxes.Count;
+            int checkedCount = childCheckBoxes.Count(cb => cb.IsChecked == true);
+
+            if (checkedCount == total)
+            {
+                parentCheckBox.IsThreeState = false;
+                parentCheckBox.IsChecked = true;
+            }
+            else if (checkedCount == 0)
+            {
+                parentCheckBox.IsThreeState = false;
+                parentCheckBox.IsChecked = false;
+            }
+            else
+            {
+                parentCheckBox.IsThreeState = true;
+                parentCheckBox.IsChecked = null;
+            }
+        }
+
         private async Task LocalLayout()
         {
             MessageBoxResult dlgResult = MessageBox.Show("On the following Dialog Box, please select where your Standalone Executables are stored from your previous installation.", "Important - Please Read!", MessageBoxButton.OKCancel, MessageBoxImage.Exclamation);
@@ -2696,13 +2642,13 @@ namespace BitCuratorWIN
             if (folderPath != "")
             {
                 string layout = await GenerateLayout(folderPath);
-                File.WriteAllText($@"{folderPath}\BitCurator-StartLayout.xml", layout);
-                ConsoleOutput(@$"Customized Start Layout written to {folderPath}\BitCurator-StartLayout.xml");
-                MessageBox.Show(@$"Customized Start Layout written to {folderPath}\BitCurator-StartLayout.xml", "Customized Start Layout Saved!", MessageBoxButton.OK, MessageBoxImage.Information);
+                await File.WriteAllTextAsync($@"{folderPath}\{displayName}-StartLayout.xml", layout);
+                ConsoleOutput(@$"Customized Start Layout written to {folderPath}\{displayName}-StartLayout.xml");
+                MessageBox.Show(@$"Customized Start Layout written to {folderPath}\{displayName}-StartLayout.xml", "Customized Start Layout Saved!", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
         private async void LocalLayoutClick(object sender, RoutedEventArgs e)
-        { 
+        {
             await LocalLayout();
         }
         private void StandalonesPicker(object sender, RoutedEventArgs e)
@@ -2756,81 +2702,82 @@ namespace BitCuratorWIN
             debloatWindow.Show();
         }
 
-        private readonly List<CheckBox> searchResults = new();
+        private readonly List<CheckBox> searchResults = [];
         private int searchIndex;
+
         public void SearchBoxTextChanged(object sender, TextChangedEventArgs e)
         {
-            searchResults.Clear();
-            string searchText = SearchBox.Text.ToLower();
-            ExpandAll();
-            bool firstResult = true;
-            
-            foreach (CheckBox checkBox in GetLogicalChildCollection<CheckBox>(AllTools))
+            if ((SearchBox.Text == string.Empty) && (SearchBox.IsFocused))
             {
-                string content = checkBox.Content.ToString()!.ToLower();
-                if (content.Contains(searchText) && searchText != string.Empty)
+                SearchBoxPlaceholder.Visibility = Visibility.Hidden;
+            }
+            ExpandAll();
+            searchResults.Clear();
+            searchIndex = -1;
+
+            string searchText = SearchBox.Text.ToLower();
+
+            foreach (TreeViewItem parent in AllTools.Items.OfType<TreeViewItem>())
+            {
+                if (parent.Header is not CheckBox) continue;
+                if (!originalChildOrder.TryGetValue(parent, out var originalChildren))
+                    continue;
+                parent.Items.Clear();
+
+                List<CheckBox> matchingChildren = [];
+                List<CheckBox> nonMatchingChildren = [];
+
+                foreach (CheckBox child in originalChildren)
                 {
-                    if (checkBox.Name.StartsWith("header"))
+                    string content = child.Content.ToString()!.ToLower();
+
+                    if (!string.IsNullOrWhiteSpace(searchText) && content.Contains(searchText))
                     {
-                        checkBox.IsEnabled = false;
-                        continue;
+                        child.Visibility = Visibility.Visible;
+                        child.Foreground = Brushes.Red;
+                        matchingChildren.Add(child);
+                        searchResults.Add(child);
                     }
                     else
                     {
-                        checkBox.Foreground = Brushes.Red;
-                        searchResults.Add(checkBox);
-                        searchIndex++;
-                        if (firstResult)
-                        {
-                            checkBox.BringIntoView();
-                            firstResult = false;
-                        }
+                        child.Visibility = string.IsNullOrWhiteSpace(searchText) ? Visibility.Visible : Visibility.Collapsed;
+                        child.Foreground = Brushes.Black;
+                        nonMatchingChildren.Add(child);
                     }
                 }
-                else
+
+                foreach (var match in matchingChildren)
                 {
-                    if (checkBox.Name.StartsWith("header"))
-                    {
-                        checkBox.IsEnabled = false;
-                        continue;
-                    }
-                    else
-                    {                      
-                        checkBox.Foreground = Brushes.Black;
-                        checkBox.Visibility = Visibility.Hidden;
-                    }
+                    parent.Items.Add(match);
                 }
-                if (string.IsNullOrWhiteSpace(searchText))
+                foreach (var nonMatch in nonMatchingChildren)
                 {
-                    var topItem = (TreeViewItem)AllTools.Items[0];
-                    topItem.BringIntoView();
-                    ImageBrush searchbgImageBrush = new()
-                    {
-                        ImageSource = new BitmapImage(new Uri("pack://application:,,,/img/search.gif", UriKind.Absolute)),
-                        AlignmentX = AlignmentX.Left,
-                        Stretch = Stretch.None
-                    };
-                    SearchBox.Background = searchbgImageBrush;
-                    foreach (CheckBox restoreCheckBox in GetLogicalChildCollection<CheckBox>(AllTools))
-                    {
-                        restoreCheckBox.IsEnabled = true;
-                        restoreCheckBox.Foreground = Brushes.Black;
-                        restoreCheckBox.Visibility = Visibility.Visible;
-                        restoreCheckBox.FontWeight = FontWeights.Normal;
-                    }
+                    parent.Items.Add(nonMatch);
+                }
+
+                parent.Visibility = matchingChildren.Count > 0 || string.IsNullOrWhiteSpace(searchText) ? Visibility.Visible : Visibility.Collapsed;
+                parent.IsExpanded = matchingChildren.Count > 0;
+            }
+
+            if (string.IsNullOrWhiteSpace(searchText))
+            {
+                SearchBoxPlaceholder.Visibility = Visibility.Hidden;
+                searchResults.Clear();
+                searchIndex = -1;
+                ClearSearch(this, new RoutedEventArgs());
+            }
+            else
+            {
+                SearchBox.Background = null;
+                if (searchResults.Count > 0)
+                {
                     searchIndex = 0;
-                    searchResults.Clear();
-                    ClearSearch(this, new RoutedEventArgs());
-                }
-                else
-                {
-                    ClearSearchBtn.Visibility = Visibility.Visible;
-                    NextResultBtn.Visibility = Visibility.Visible;
-                    PreviousResultBtn.Visibility = Visibility.Visible;
-                    SearchBox.Background = null;
+                    searchResults[0].BringIntoView();
+                    searchResults[0].FontWeight = FontWeights.Bold;
                 }
             }
         }
+
         public void NextResult(object sender, RoutedEventArgs e)
         {
             if (searchResults.Count == 0)
@@ -2841,40 +2788,12 @@ namespace BitCuratorWIN
             {
                 checkBox.FontWeight = FontWeights.Normal;
             }
-            int totalIndices = searchResults.Count - 1;
-            if (searchIndex > totalIndices)
-            {
-                searchIndex = totalIndices;
-            }
-            int currentIndex = searchIndex;
-            if (currentIndex < 0)
-            {
-                currentIndex = 0;
-                searchIndex = 0;
-            }
-            if (currentIndex < totalIndices)
-            {
-                CheckBox checkBoxLess = searchResults[currentIndex + 1];
-                checkBoxLess.BringIntoView();
-                checkBoxLess.FontWeight = FontWeights.Bold;
-                searchIndex++;
-            }
-            else if (currentIndex == totalIndices)
-            {
-                CheckBox checkBoxEqual = searchResults[0];
-                checkBoxEqual.BringIntoView();
-                checkBoxEqual.FontWeight = FontWeights.Bold;
-                searchIndex = 0;
-            }
-            else
-            {
-                CheckBox checkBoxResult = searchResults[currentIndex];
-                checkBoxResult.BringIntoView();
-                checkBoxResult.FontWeight = FontWeights.Bold;
-                searchIndex++;
-            }
-
+            searchIndex = (searchIndex + 1) % searchResults.Count;
+            CheckBox current = searchResults[searchIndex];
+            current.BringIntoView();
+            current.FontWeight = FontWeights.Bold;
         }
+
         public void PreviousResult(object sender, RoutedEventArgs e)
         {
             if (searchResults.Count == 0)
@@ -2885,58 +2804,122 @@ namespace BitCuratorWIN
             {
                 checkBox.FontWeight = FontWeights.Normal;
             }
-            int totalIndices = searchResults.Count - 1;
-            if (searchIndex > totalIndices)
-            {
-                searchIndex = totalIndices;
-            }
-            int currentIndex = searchIndex;
-            if (currentIndex < 0)
-            {
-                currentIndex = totalIndices;
-                searchIndex = totalIndices;
-            }
-            if (currentIndex < totalIndices && currentIndex > 0)
-            {
-                CheckBox cb = searchResults[currentIndex - 1];
-                cb.BringIntoView();
-                cb.FontWeight = FontWeights.Bold;
-                searchIndex--;
-            }
-            else if (currentIndex == totalIndices && currentIndex != 0)
-            {
-                CheckBox checkBoxBack = searchResults[currentIndex - 1];
-                checkBoxBack.BringIntoView();
-                checkBoxBack.FontWeight = FontWeights.Bold;
-                searchIndex--;
-            }
-            else if (currentIndex == 0)
-            {
-                CheckBox checkBoxEnd = searchResults[totalIndices];
-                checkBoxEnd.BringIntoView();
-                checkBoxEnd.FontWeight = FontWeights.Bold;
-                searchIndex = totalIndices;
-            }
+            searchIndex = (searchIndex - 1 + searchResults.Count) % searchResults.Count;
+            CheckBox current = searchResults[searchIndex];
+            current.BringIntoView();
+            current.FontWeight = FontWeights.Bold;
         }
-        private void ClearSearch(object sender, RoutedEventArgs e)
+        public void ClearSearch(object sender, RoutedEventArgs e)
         {
             SearchBox.Text = string.Empty;
-            ClearSearchBtn.Visibility = Visibility.Hidden;
-            NextResultBtn.Visibility = Visibility.Hidden;
-            PreviousResultBtn.Visibility = Visibility.Hidden;
-            searchIndex = 0;
+            if (!SearchBox.IsFocused)
+            {
+                SearchBoxPlaceholder.Visibility = Visibility.Visible;
+            }
+
+            foreach (TreeViewItem parent in AllTools.Items.OfType<TreeViewItem>())
+            {
+                parent.Visibility = Visibility.Visible;
+                parent.IsExpanded = false;
+
+                foreach (CheckBox childCheckBox in parent.Items.OfType<CheckBox>())
+                {
+                    childCheckBox.Visibility = Visibility.Visible;
+                    childCheckBox.Foreground = Brushes.Black;
+                    childCheckBox.FontWeight = FontWeights.Normal;
+                }
+            }
             searchResults.Clear();
+            searchIndex = 0;
             CollapseAll();
         }
+
 
         private void ClearConsole(object sender, RoutedEventArgs e)
         {
             OutputConsole.Clear();
             OutputExpander.IsExpanded = false;
         }
-        private void TestButton(object sender, RoutedEventArgs e)
-        {
+        //private void TestButton_Click(object sender, RoutedEventArgs e)
+        //Used simply for testing
 
+        private void StandalonesPath_GotFocus(object sender, RoutedEventArgs e)
+        {
+            StandalonesPlaceholder.Visibility = Visibility.Hidden;
+        }
+
+        private void StandalonesPath_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(StandalonesPath.Text))
+            {
+                StandalonesPlaceholder.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void DownloadsPath_GotFocus(object sender, RoutedEventArgs e)
+        {
+            DownloadsPlaceholder.Visibility = Visibility.Hidden;
+        }
+
+        private void DownloadsPath_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(DownloadsPath.Text))
+            {
+                DownloadsPlaceholder.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SearchBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            SearchBoxPlaceholder.Visibility = Visibility.Hidden;
+        }
+
+        private void SearchBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(SearchBox.Text))
+            {
+                SearchBoxPlaceholder.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void UserName_GotFocus(object sender, RoutedEventArgs e)
+        {
+            UserNamePlaceholder.Visibility = Visibility.Hidden;
+        }
+
+        private void UserName_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(UserName.Text))
+            {
+                UserNamePlaceholder.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void HostName_GotFocus(object sender, RoutedEventArgs e)
+        {
+            HostNamePlaceholder.Visibility = Visibility.Hidden;
+        }
+
+        private void HostName_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(HostName.Text))
+            {
+                HostNamePlaceholder.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void ExpandCollapse_Click(object sender, RoutedEventArgs e)
+        {
+            if (ExpandCollapseTextBox.Text == "Expand All")
+            {
+                ExpandAll();
+                ExpandCollapseTextBox.Text = "Collapse All";
+            }
+            else if (ExpandCollapseTextBox.Text == "Collapse All")
+            {
+                CollapseAll();
+                ExpandCollapseTextBox.Text = "Expand All";
+            }
         }
     }
 }
