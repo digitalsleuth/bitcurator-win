@@ -47,7 +47,7 @@ namespace BitCuratorWIN
         private static readonly string githubBinaryReleaseDownload = "https://github.com/digitalsleuth/bitcurator-win/releases/download";
         private static readonly string githubBinaryRepo = "https://github.com/digitalsleuth/bitcurator-win";
         private static readonly string toolListPdf = "https://github.com/digitalsleuth/bitcurator-win-salt/raw/main/bitcurator/files/BitCurator-Tool-List.pdf";
-        private static readonly string configFile = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/.config";
+        private static readonly string configFile = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win/main/.config";
         private static readonly string layoutFile = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/{src}/config/layout/layout.json";
         private static readonly string themeTemplateZip = "https://github.com/digitalsleuth/bitcurator-win/raw/refs/heads/main/blank-template.zip";
 #pragma warning disable CS8602 // Deference of a possibly null reference.
@@ -1292,7 +1292,7 @@ namespace BitCuratorWIN
                 var jsonData = JsonDocument.Parse(data);
                 var release = (jsonData.RootElement.GetProperty("tag_name")).ToString();
                 string releaseFile = $"{githubTags}/{release}.zip";
-                string releaseHash = $"{githubReleaseDownload}/{release}/{src}-salt-{release}.zip.sha256";
+                string releaseHash = $"{githubReleaseDownload}/{release}/{src}-win-salt-{release}.zip.sha256";
                 releaseData.Add(release);
                 releaseData.Add(releaseFile);
                 releaseData.Add(releaseHash);
@@ -1404,7 +1404,7 @@ namespace BitCuratorWIN
                     saltBase = @$"{saltPath}\";
                 }
                 string shortRelease = release.TrimStart('v');
-                string distroFolder = $@"{tempDir}{src}-salt-{shortRelease}\{src}";
+                string distroFolder = $@"{tempDir}{src}-win-salt-{shortRelease}\{src}";
                 string distroDest = $@"{saltBase}{src}";
                 ConsoleOutput($"Extracting {file} to {tempDir}");
                 ZipFile.ExtractToDirectory(file, tempDir, true);
@@ -1709,6 +1709,7 @@ namespace BitCuratorWIN
                     saltproc.Kill(true);
                     saltproc.WaitForExit();
                     ConsoleOutput("SaltStack was terminated.");
+                    StopButton.Visibility= Visibility.Hidden;
                 }
                 catch (Exception ex)
                 {
@@ -1722,6 +1723,7 @@ namespace BitCuratorWIN
                     wslproc.Kill(true);
                     wslproc.WaitForExit();
                     ConsoleOutput("SaltStack was terminated.");
+                    StopButton.Visibility = Visibility.Hidden;
                 }
                 catch (Exception ex)
                 {
