@@ -596,7 +596,7 @@ namespace BitCuratorWIN
                 foreach (string tool in allChecked)
                 {
                     int underScoreIndex = tool.IndexOf('_');
-                    if (tool.Split("_")[0] == "python3")
+                    if (tool.Split("_")[0] == "python")
                     {
                         if (stateType == "install")
                         {
@@ -1809,6 +1809,7 @@ namespace BitCuratorWIN
                     $"Exit code \t: {proc.ExitCode}\n" +
                     $"Elapsed time\t: {Math.Round((proc.ExitTime - proc.StartTime).TotalMilliseconds)}");
                     ProcHandled?.TrySetResult(true);
+                    StopButton.Visibility = Visibility.Hidden;
                 }
                 catch (Exception ex)
                 {
@@ -1903,6 +1904,7 @@ namespace BitCuratorWIN
                     $"Exit code \t: {proc.ExitCode}\n" +
                     $"Elapsed time\t: {Math.Round((proc.ExitTime - proc.StartTime).TotalMilliseconds)}");
                     wslHandled?.TrySetResult(true);
+                    StopButton.Visibility = Visibility.Hidden;
                 }
                 catch (Exception ex)
                 {
