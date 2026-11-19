@@ -2,17 +2,17 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.18362.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <RootNamespace>BitCuratorWIN</RootNamespace>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <Platforms>AnyCPU;x64</Platforms>
     <Title>BitCurator-WIN</Title>
-    <PackageIcon>fp128.png</PackageIcon>
+    <PackageIcon>bc.png</PackageIcon>
     <RepositoryUrl>https://github.com/bitcurator/bitcurator-win</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <ApplicationIcon>img\fp.ico</ApplicationIcon>
-    <Version>2.0.0</Version>
+    <ApplicationIcon>img\bc.ico</ApplicationIcon>
+    <Version>3.0.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <Authors>Corey Forman (digitalsleuth)</Authors>
@@ -21,17 +21,18 @@
     <PackageTags>bitcurator;digitalsleuth</PackageTags>
     <Copyright>Corey Forman (digitalsleuth)</Copyright>
     <Company>digitalsleuth</Company>
-    <SupportedOSPlatformVersion>10.0.18362.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageId>BitCurator.WIN</PackageId>
-	<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
 	<NeutralLanguage>en</NeutralLanguage>
 	<ApplicationManifest>app.manifest</ApplicationManifest>
-	<UseWindowsForms>True</UseWindowsForms>
 	<ProduceReferenceAssembly>False</ProduceReferenceAssembly>
 	<AssemblyName>bitcurator-win-v$(AssemblyVersion)</AssemblyName>
 	<RunPostBuildEvent>OnOutputUpdated</RunPostBuildEvent>
+	<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+	<PublishReadyToRun>false</PublishReadyToRun>
+	<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -53,25 +54,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="img\find.png" />
     <None Remove="img\Thumbs.db" />
     <None Remove="Thumbs.db" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="img\fp.ico">
-		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.1.6" />
   </ItemGroup>
 
   <ItemGroup>
     <Resource Include="img\bcwhite.png">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Resource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="img\bc.ico">
+		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -83,7 +79,7 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-    <None Update="img\fp128.png">
+    <None Update="img\bc.png">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>

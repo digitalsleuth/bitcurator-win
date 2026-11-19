@@ -1,14 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Linq;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
+
 
 namespace BitCuratorWIN
 {
@@ -17,18 +22,33 @@ namespace BitCuratorWIN
     /// </summary>
     public partial class DebloatWindow : Window
     {
-        private static readonly string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
-        private static readonly string debloatJson = $@"https://raw.githubusercontent.com/digitalsleuth/bitcurator-win-salt/main/bitcurator/config/debloat.json";
+        private const string saltConfigFolder = $@"{MainWindow.saltPath}\{MainWindow.src}\config";
+        private const string tempDir = MainWindow.debloatTempDir;
+        private static readonly string[] debloatScripts = ["Win10.ps1", "Win10.psm1"];
+        private const double SegmentRadius = 3;
+        private static SolidColorBrush accentBrush => (SolidColorBrush)Application.Current.FindResource("AccentBrush");
+        private static readonly SolidColorBrush segmentBorderBrush = new(Color.FromRgb(0xD0, 0xD0, 0xD0));
+        private static List<TabItems>? cachedOptions;
+        private readonly List<RadioButton> radioButtons = [];
+        private readonly List<SettingRow> settingRows = [];
+        private readonly Dictionary<string, StackPanel> categoryPanels = [];
+        private readonly Dictionary<string, TextBlock> categoryHeaders = [];
+        private readonly Dictionary<string, TextBlock> categoryCounts = [];
+        private bool bulkUpdating;
+        //private static readonly Version windowsOS = Environment.OSVersion.Version;
+
         public DebloatWindow()
         {
             InitializeComponent();
+            MaxHeight = SystemParameters.WorkArea.Height;
+            Title = "Debloat Options - loading...";
             SetupDebloatOptions();
         }
         public static class DebloatSettings
         {
-            public static List<string>? Selections;
-            public static List<string>? DefaultOptions = new()
-            {
+            public static List<string> Selections = [];
+            public static readonly HashSet<string> DefaultOptions =
+            [
                 "RequireAdmin",
                 "DisableTelemetry",
                 "DisableCortana",
@@ -152,68 +172,115 @@ namespace BitCuratorWIN
                 "RemoveFaxPrinter",
                 "UnpinStartMenuTiles",
                 "UnpinTaskbarIcons"
-            };
+            ];
         }
-        private List<string> GetRadioButtonsStatus()
-        // Get the current state of all Radio Buttons and return a List of those which are not None
-        {
-            List<string> selectedRadioButtons = [];
 
-            // Iterate through all TabItems in the TabControl
-            foreach (TabItem tabItem in Tabs.Items)
-            {
-                // Find all RadioButton controls in each TabItem, which are in Grids, so we need to enumerate the Content
-                List<RadioButton> radioButtons = MainWindow.GetLogicalChildCollection<RadioButton>((DependencyObject)tabItem.Content);
-                foreach (RadioButton radioButton in radioButtons)
-                {
-                    if (radioButton.IsChecked == true && radioButton.Name != "None")
-                    {
-                        // Add the Name of the selected RadioButton to the list
-                        selectedRadioButtons.Add(radioButton.Name);
-                    }
-                }
-            }
-            return selectedRadioButtons;
+        
+        private List<string> GetRadioButtonsStatus()
+        // Names of the checked Radio Buttons which are not None
+        {
+            return [.. radioButtons.Where(radioButton => radioButton.IsChecked == true && radioButton.Name != "None").Select(radioButton => radioButton.Name)];
         }
         private void GetRadioButtonsStatus_Click(object sender, RoutedEventArgs e)
         // Get the current state of all Radio Buttons from GetRadioButtonStatus, and save it to the DebloatSettings.Selections variable
         {
-            List<string> selectedRadioButtons = GetRadioButtonsStatus();
-            DebloatSettings.Selections = selectedRadioButtons;
-            MessageBox.Show("Selections saved!\nThese choices will be used for the debloat during installation.\n\nYou may now close this window.", "Selections saved!", MessageBoxButton.OK, MessageBoxImage.Information);
+            DebloatSettings.Selections = GetRadioButtonsStatus();
+            RefreshState();
+            MessageBox.Show("Selections saved!\nThese choices will be used for the debloat during installation.\n\nYou may now close this window, or click the Debloat Now button to begin.", "Selections saved!", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         private void ResetButton_Click(object sender, RoutedEventArgs e)
         // Set all Radio Buttons status of "IsChecked" to false
         {
-            foreach (TabItem tabItem in Tabs.Items)
+            bulkUpdating = true;
+            foreach (RadioButton radioButton in radioButtons)
             {
-                List<RadioButton> radioButtons = MainWindow.GetLogicalChildCollection<RadioButton>((DependencyObject)tabItem.Content);
-                foreach (RadioButton radioButton in radioButtons)
-                {
-                    radioButton.IsChecked = false;
-                }
+                radioButton.IsChecked = false;
             }
+            bulkUpdating = false;
+            RefreshState();
         }
         private void DefaultButton_Click(object sender, RoutedEventArgs e)
         // Load all the default options from DebloatSettings.DefaultOptions
         {
-            foreach (TabItem tabItem in Tabs.Items)
+            //List<string> laterOptions = ["DisableNewsAndInterests"];
+            //if (windowsOS.Major == 11 && windowsOS.Build >= 22000)
+            //{
+            //foreach (string option in laterOptions)
+            //{
+            //DebloatSettings.DefaultOptions!.Remove(option);
+            //defaultOptions.Remove(option);
+            //}
+            //}
+            bulkUpdating = true;
+            foreach (RadioButton radioButton in radioButtons)
             {
-                List<RadioButton> radioButtons = MainWindow.GetLogicalChildCollection<RadioButton>((DependencyObject)tabItem.Content);
-                // Find all RadioButton controls in each TabItem, which are in Grids, so we need to enumerate the Content
-                // Sets / shows the default options if debloat is not chosen.
-                foreach (RadioButton radioButton in radioButtons)
+                if (DebloatSettings.DefaultOptions.Contains(radioButton.Name))
                 {
-                    foreach (string setting in DebloatSettings.DefaultOptions!)
-                    {
-                        if (radioButton.Name == setting)
-                        {
-                            radioButton.IsChecked = true;
-                        }
-                    }
+                    radioButton.IsChecked = true;
                 }
             }
+            bulkUpdating = false;
+            RefreshState();
         }
+
+        private async void DebloatButton_Click(object sender, RoutedEventArgs e)
+        {
+            List<string> selectedRadioButtons = GetRadioButtonsStatus();
+            if (selectedRadioButtons.Count == 0)
+            {
+                MessageBox.Show("No options selected.\nChoose at least one option, or click Defaults, before using Debloat Now.", "No options selected!", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+                return;
+            }
+            DebloatButton.IsEnabled = false;
+            try
+            {
+                Directory.CreateDirectory(tempDir);
+                await File.WriteAllTextAsync($@"{tempDir}\debloat.preset", string.Join("\n", selectedRadioButtons));
+                string? releaseTag = null;
+                foreach (string file in debloatScripts)
+                {
+                    string localScript = $@"{saltConfigFolder}\{file}";
+                    if (File.Exists(localScript))
+                    {
+                        File.Copy(localScript, $@"{tempDir}\{file}", true);
+                        continue;
+                    }
+                    releaseTag ??= await MainWindow.LatestSaltRelease();
+                    string uri = $@"{MainWindow.githubRaw}/{releaseTag}/{MainWindow.src}/config/{file}";
+                    if (releaseTag is null || !await MainWindow.FileDownload(uri, $@"{tempDir}\{file}"))
+                    {
+                        MessageBox.Show(releaseTag is null ? "Unable to determine the latest release - check your network connectivity and try again." : $"Unable to download {uri}.", $"Unable to download required debloat file {file}.", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                ProcessStartInfo startInfo = new()
+                {
+                    FileName = "powershell.exe",
+                    Arguments = @"-nop -ep Bypass -File ""Win10.ps1"" -include ""Win10.psm1"" -preset ""debloat.preset""",
+                    UseShellExecute = true,
+                    WorkingDirectory = tempDir
+                };
+                using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("powershell.exe did not start.");
+                await process.WaitForExitAsync();
+                if (process.ExitCode == 0)
+                {
+                    MessageBox.Show("Debloat complete!", "Debloat complete!", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show($"The debloat script finished with exit code {process.ExitCode}.\nSome options may not have been applied.","Debloat finished with errors", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Unable to complete debloat:\n{ex}.", "Unable to complete debloat!", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                DebloatButton.IsEnabled = true;
+            }
+        }
+
         public class TabItems
         {
             public string? Header { get; set; }
@@ -230,20 +297,31 @@ namespace BitCuratorWIN
 
         private static async Task<List<TabItems>> GetDebloatJson()
         {
-            List<TabItems>? jsonData = [];
+            if (cachedOptions is not null)
+            {
+                return cachedOptions;
+            }
             try
             {
-                CancellationTokenSource cancellationToken = new(new TimeSpan(0, 0, 200));
-                HttpClient httpClient = new();
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
-                jsonData = await httpClient.GetFromJsonAsync<List<TabItems>>(debloatJson, cancellationToken.Token);
-                cancellationToken.Dispose();
+                string localJson = $@"{saltConfigFolder}\debloat.json";
+                if (File.Exists(localJson))
+                {
+                    await using FileStream stream = File.OpenRead(localJson);
+                    cachedOptions = await JsonSerializer.DeserializeAsync<List<TabItems>>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                }
+                else
+                {
+                    string releaseTag = await MainWindow.LatestSaltRelease() ?? "main";
+                    using CancellationTokenSource cancellationToken = new(TimeSpan.FromSeconds(30));
+                    cachedOptions = await MainWindow.httpClient.GetFromJsonAsync<List<TabItems>>($"{MainWindow.githubRaw}/{releaseTag}/{MainWindow.src}/config/debloat.json", cancellationToken.Token);
+                }
+                return cachedOptions ?? [];
             }
-            catch (HttpRequestException)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or IOException)
             {
-                MessageBox.Show($"[ERROR] Unable to get JSON Layout - check your network connectivity and try again");
+                MessageBox.Show($"[ERROR] Unable to get the debloat options - check your network connectivity and try again ({ex.Message})");
+                return [];
             }
-            return jsonData!;
         }
         private void SaveAsFileButton_Click(object sender, RoutedEventArgs e)
         {
@@ -264,7 +342,9 @@ namespace BitCuratorWIN
             {
                 SaveFileDialog saveFileDialog = new()
                 {
-                    Filter = "Preset File | *.preset"
+                    Filter = "Preset File (*.preset)|*.preset",
+                    DefaultExt = ".preset",
+                    FileName = "debloat.preset"
                 };
                 if (saveFileDialog.ShowDialog() == true)
                     File.WriteAllText(saveFileDialog.FileName, string.Join("\n", debloatSettings));
@@ -279,91 +359,242 @@ namespace BitCuratorWIN
         {
             try
             {
-                string themeColourBlue = "#7EB4EA";
-                string themeColourRed = "#FFCB393B";
-                Color colourBlue = (Color)ColorConverter.ConvertFromString(themeColourBlue);
-                Color colourRed = (Color)ColorConverter.ConvertFromString(themeColourRed);
-                SolidColorBrush themeBrushBlue = new(colourBlue);
-                SolidColorBrush themeBrushRed = new(colourRed);
                 var jsonData = await GetDebloatJson();
-
+                bulkUpdating = true;
                 foreach (var section in jsonData)
                 {
-                    string sectionHeader = section.Header!;
-                    string sectionName = section.Name!;
-                    Panel stackName0 = (Panel)FindName(section.StackName + "0");
-                    Panel stackName1 = (Panel)FindName(section.StackName + "1");
-                    int numGroupsPerPanel = (section.Settings!.Count + 1) / 2;
-                    int groupNumber = 1;
+                    string category = section.Header ?? section.Name ?? "Other";
+                    StackPanel panel = new() { Visibility = Visibility.Collapsed };
+                    TextBlock header = new()
+                    {
+                        Text = category,
+                        FontSize = 12,
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = accentBrush,
+                        Margin = new Thickness(0, 12, 0, 2),
+                        Visibility = Visibility.Collapsed
+                    };
+                    panel.Children.Add(header);
+                    categoryPanels[category] = panel;
+                    categoryHeaders[category] = header;
                     foreach (var function in section.Settings!)
                     {
-                        int numFunctions = function.Value.Options!.Length;
-                        string functionContent = function.Value.RadioButtonContents!;
-                        GroupBox groupBox = new()
+                        string[] options = function.Value.Options!;
+                        string[] labels = function.Value.RadioButtonContents!.Split('-');
+                        List<RadioButton> optionButtons = [];
+                        StackPanel segments = new() { Orientation = Orientation.Horizontal };
+                        for (int i = 0; i < options.Length; i++)
                         {
-                            Header = function.Key,
-                            Foreground = themeBrushRed,
-                            Width = 300,
-                            HorizontalAlignment = HorizontalAlignment.Center,
-                            BorderBrush = Brushes.CornflowerBlue
-
-                        };
-                        StackPanel radioButtonPanel = new()
-                        {
-                            Orientation = Orientation.Horizontal
-                        };
-                        for (int i = 0; i <= numFunctions - 1; i++)
-                        {
+                            double left = i == 0 ? SegmentRadius : 0;
+                            double right = i == options.Length - 1 ? SegmentRadius : 0;
                             RadioButton optionRadioButton = new()
                             {
-                                Content = functionContent!.Split("-")[i] + "   ",
-                                GroupName = function.Key,
-                                Name = function.Value.Options[i]
+                                Style = (Style)FindResource("SegmentRadio"),
+                                Content = i < labels.Length ? labels[i] : options[i],
+                                GroupName = $"{category}|{function.Key}",
+                                Name = options[i],
+                                Tag = new CornerRadius(left, right, right, left),
+                                BorderThickness = new Thickness(i == 0 ? 0 : 1, 0, 0, 0)
                             };
-
-                            radioButtonPanel.Children.Add(optionRadioButton);
+                            optionRadioButton.Checked += OptionChanged;
+                            optionRadioButton.Unchecked += OptionChanged;
+                            optionRadioButton.PreviewMouseLeftButtonDown += Option_PreviewMouseLeftButtonDown;
+                            optionRadioButton.PreviewKeyDown += Option_PreviewKeyDown;
+                            optionButtons.Add(optionRadioButton);
+                            segments.Children.Add(optionRadioButton);
                         }
-                        ;
-                        RadioButton doNothingRadioButton = new()
+                        Border bar = new()
                         {
-                            Content = "None",
-                            Name = "None",
-                            GroupName = function.Key
+                            Width = 3,
+                            Margin = new Thickness(0, 2, 10, 2),
+                            Background = accentBrush,
+                            CornerRadius = new CornerRadius(1.5),
+                            Visibility = Visibility.Hidden
                         };
-                        radioButtonPanel.Children.Add(doNothingRadioButton);
-                        groupBox.Content = radioButtonPanel;
-                        if (groupNumber <= numGroupsPerPanel)
+                        TextBlock name = new()
                         {
-                            stackName0.Children.Add(groupBox);
-                        }
-                        else
+                            Text = function.Key,
+                            FontSize = 12.5,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            TextTrimming = TextTrimming.CharacterEllipsis
+                        };
+                        Border segmentFrame = new()
                         {
-                            stackName1.Children.Add(groupBox);
-                        }
-                        groupNumber++;
+                            BorderBrush = segmentBorderBrush,
+                            BorderThickness = new Thickness(1),
+                            CornerRadius = new CornerRadius(SegmentRadius + 1),
+                            Margin = new Thickness(12, 0, 4, 0),
+                            Child = segments
+                        };
+                        Grid rowGrid = new();
+                        rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                        rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        Grid.SetColumn(name, 1);
+                        Grid.SetColumn(segmentFrame, 2);
+                        rowGrid.Children.Add(bar);
+                        rowGrid.Children.Add(name);
+                        rowGrid.Children.Add(segmentFrame);
+                        Border container = new()
+                        {
+                            Style = (Style)FindResource("SettingRow"),
+                            ToolTip = string.Join(", ", options),
+                            Child = rowGrid
+                        };
+                        panel.Children.Add(container);
+                        settingRows.Add(new SettingRow { Category = category, Name = function.Key, Container = container, Bar = bar, Options = optionButtons });
+                        radioButtons.AddRange(optionButtons);
                     }
+                    OptionsHost.Children.Add(panel);
+                    TextBlock count = new() { FontSize = 11, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center };
+                    Grid itemGrid = new();
+                    itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    itemGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    Grid.SetColumn(count, 1);
+                    itemGrid.Children.Add(new TextBlock { Text = category, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis });
+                    itemGrid.Children.Add(count);
+                    categoryCounts[category] = count;
+                    CategoryList.Items.Add(new ListBoxItem { Content = itemGrid, Tag = category });
                 }
-                if (DebloatSettings.Selections != null)
+                foreach (RadioButton radioButton in radioButtons)
                 {
-                    foreach (TabItem tabItem in Tabs.Items)
+                    if (DebloatSettings.Selections.Contains(radioButton.Name))
                     {
-                        List<RadioButton> radioButtons = MainWindow.GetLogicalChildCollection<RadioButton>((DependencyObject)tabItem.Content);
-                        foreach (string setting in DebloatSettings.Selections)
-                        {
-                            foreach (RadioButton radioButton in radioButtons)
-                            {
-                                if (radioButton.Name == setting)
-                                {
-                                    radioButton.IsChecked = true;
-                                }
-                            }
-                        }
+                        radioButton.IsChecked = true;
                     }
                 }
+                if (jsonData.Count == 0)
+                {
+                    NoResultsText.Text = "The debloat options could not be loaded.";
+                }
+                bulkUpdating = false;
+                RefreshState();
+                CategoryList.SelectedIndex = 0;
+                ApplyView();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($@"[ERROR] Unable to display the debloat options window: {ex}");
+            }
+            finally
+            {
+                bulkUpdating = false;
+                Title = "Debloat Options";
+            }
+        }
+
+        private sealed class SettingRow
+        {
+            public required string Category { get; init; }
+            public required string Name { get; init; }
+            public required Border Container { get; init; }
+            public required Border Bar { get; init; }
+            public required List<RadioButton> Options { get; init; }
+        }
+
+        private void RefreshState()
+        // Updates the row markers, the per-category counts and the summary line from the current selections
+        {
+            foreach (SettingRow row in settingRows)
+            {
+                row.Bar.Visibility = row.Options.Any(option => option.IsChecked == true) ? Visibility.Visible : Visibility.Hidden;
+            }
+            foreach ((string category, TextBlock count) in categoryCounts)
+            {
+                int selected = settingRows.Count(row => row.Category == category && row.Options.Any(option => option.IsChecked == true));
+                count.Text = $"{selected} / {settingRows.Count(row => row.Category == category)}";
+                count.FontWeight = selected > 0 ? FontWeights.SemiBold : FontWeights.Normal;
+            }
+            List<string> selections = GetRadioButtonsStatus();
+            int categories = settingRows.Where(row => row.Options.Any(option => option.IsChecked == true)).Select(row => row.Category).Distinct().Count();
+            string summary = selections.Count == 0 ? "No options selected" : $"{selections.Count} {(selections.Count == 1 ? "option" : "options")} selected in {categories} {(categories == 1 ? "category" : "categories")}";
+            SummaryText.Text = selections.ToHashSet().SetEquals(DebloatSettings.Selections)
+                ? summary + (selections.Count == 0 ? " - installation will skip the debloat" : " - saved for installation")
+                : summary + " - not saved yet, use Save Settings";
+        }
+
+        private void ApplyView()
+        // Shows the selected category, or every matching row from all categories while a search is active
+        {
+            string query = SearchBox.Text.Trim();
+            bool searching = query.Length > 0;
+            string? current = (CategoryList.SelectedItem as ListBoxItem)?.Tag as string;
+            bool anyShown = false;
+            foreach ((string category, StackPanel panel) in categoryPanels)
+            {
+                bool anyMatch = false;
+                foreach (SettingRow row in settingRows.Where(row => row.Category == category))
+                {
+                    bool match = !searching || row.Name.Contains(query, StringComparison.OrdinalIgnoreCase) || row.Options.Any(option => option.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+                    row.Container.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
+                    anyMatch |= match;
+                }
+                categoryHeaders[category].Visibility = searching ? Visibility.Visible : Visibility.Collapsed;
+                bool show = searching ? anyMatch : category == current;
+                panel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                anyShown |= show;
+            }
+            NoResultsText.Visibility = anyShown ? Visibility.Collapsed : Visibility.Visible;
+            OptionsScroll.ScrollToTop();
+        }
+
+        private void OptionChanged(object sender, RoutedEventArgs e)
+        {
+            if (!bulkUpdating)
+            {
+                RefreshState();
+            }
+        }
+
+        private void Option_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        // Clicking the selected segment clears the setting (the old "None" choice)
+        {
+            if (sender is RadioButton { IsChecked: true } radioButton)
+            {
+                radioButton.IsChecked = false;
+                radioButton.Focus();
+                e.Handled = true;
+            }
+        }
+
+        private void Option_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Space && sender is RadioButton { IsChecked: true } radioButton)
+            {
+                radioButton.IsChecked = false;
+                e.Handled = true;
+            }
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ApplyView();
+        }
+
+        private void CategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (SearchBox.Text.Length > 0)
+            {
+                SearchBox.Clear();
+            }
+            else
+            {
+                ApplyView();
+            }
+        }
+
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                SearchBox.Focus();
+                SearchBox.SelectAll();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && SearchBox.Text.Length > 0)
+            {
+                SearchBox.Clear();
+                e.Handled = true;
             }
         }
     }
