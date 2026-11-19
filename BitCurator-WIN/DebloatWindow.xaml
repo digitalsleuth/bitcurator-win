@@ -3,124 +3,63 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BitCuratorWIN"
         mc:Ignorable="d"
-        ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen" SnapsToDevicePixels="True" UseLayoutRounding="True"
-        Title="Debloat Options" SizeToContent="Height" Width="650">
-    <StackPanel MaxHeight="1200">
-        <Grid>
-            <TextBox Width="660" FontSize="12" Margin="0,3,0,0" Text="These options will allow you to debloat your Windows Setup during the installation process.&#x0a;USE AT YOUR OWN RISK!" VerticalAlignment="Top" HorizontalAlignment="Center" TextWrapping="Wrap" VerticalContentAlignment="Top" HorizontalContentAlignment="Center" Foreground="Black" BorderBrush="Transparent" Focusable="False" IsReadOnly="True" IsEnabled="True" BorderThickness="0,0,0,0" />
-            <Button x:Name="DefaultOptionsButton" Width="90" Height="25" FontSize="12" Content="Show Default" Margin="-300,45,0,5" Click="DefaultButton_Click" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Center" Background="White" BorderThickness="1" BorderBrush="#7EB4EA"/>
-            <Button x:Name="ResetAllButton" Width="90" Height="25" FontSize="12" Content="Reset" Margin="-100,45,0,5" Click="ResetButton_Click" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Center" Background="White" BorderThickness="1" BorderBrush="#7EB4EA"/>
-            <Button x:Name="SaveSettingsButton" Width="90" Height="25" FontSize="12" Content="Save Settings" Margin="100,45,0,5" Click="GetRadioButtonsStatus_Click" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Center" Background="White" BorderThickness="1" BorderBrush="#7EB4EA"/>
-            <Button x:Name="SaveAsFileButton" Width="90" Height="25" FontSize="12" Content="Save As File" Margin="300,45,0,5" Click="SaveAsFileButton_Click" HorizontalAlignment="Center" VerticalAlignment="Top" VerticalContentAlignment="Center" Background="White" BorderThickness="1" BorderBrush="#7EB4EA"/>
+        Title="Debloat Options" Width="780" Height="660" MinWidth="680" MinHeight="420" Background="White"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0" Margin="14,10,14,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="SearchBox" Grid.Column="0" Height="26" FontSize="12" VerticalContentAlignment="Center" local:Placeholder.Text="Search all options" TextChanged="SearchBox_TextChanged" ToolTip="Search every category (Ctrl+F)"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="DefaultOptionsButton" Width="90" Height="26" FontSize="12" Content="Show Default" Click="DefaultButton_Click" Background="White" ToolTip="Select the recommended default options"/>
+                <Button x:Name="ResetAllButton" Width="70" Height="26" FontSize="12" Content="Reset" Margin="8,0,0,0" Click="ResetButton_Click" Background="White" ToolTip="Clear every selection"/>
+            </StackPanel>
         </Grid>
-        <TabControl x:Name="Tabs" Margin="0,5,0,0" TabStripPlacement="Top" FontSize="12" HorizontalAlignment="Center" HorizontalContentAlignment="Center" VerticalAlignment="Top">
-            <TabControl.Resources>
-                <Style TargetType="TabPanel">
-                    <Setter Property="HorizontalAlignment" Value="Center"/>
-                </Style>
-            </TabControl.Resources>
-            <TabItem Header="Application" Name="Application">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="ApplicationStack0" Margin="6,5,0,0" Height="660"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="ApplicationStack1" Margin="0,5,6,0" Height="660"  HorizontalAlignment="Left" Grid.Column="1"/>
+        <Border Grid.Row="1" Margin="14,10,14,0" Padding="10,6" Background="#FFFFF4CE" BorderBrush="#FFE8D58A" BorderThickness="1" CornerRadius="4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#FF7A5C00" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock Text="These options debloat your Windows setup during the installation process. Use at your own risk." FontSize="12" Foreground="#FF5C4A00" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="190"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ListBox x:Name="CategoryList" Grid.Column="0" Margin="10,0,6,0" BorderThickness="0" Background="Transparent" ItemContainerStyle="{StaticResource CategoryItem}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="CategoryList_SelectionChanged"/>
+            <Border Grid.Column="0" Width="1" HorizontalAlignment="Right" Background="{StaticResource DividerBrush}"/>
+            <ScrollViewer x:Name="OptionsScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,0">
+                <Grid>
+                    <StackPanel x:Name="OptionsHost" Margin="16,0,16,8"/>
+                    <TextBlock x:Name="NoResultsText" Text="No options match your search." Foreground="Gray" FontSize="12" Margin="16,12,0,0" Visibility="Collapsed"/>
                 </Grid>
-            </TabItem>
-            <TabItem Header="Explorer UI" Name="ExplorerUI">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="ExplorerUIStack0" Margin="6,5,0,0" Height="890"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="ExplorerUIStack1" Margin="0,5,6,0" Height="890"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Network" Name="Network">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="NetworkStack0" Margin="6,5,0,0" Height="355"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="NetworkStack1" Margin="0,5,6,0" Height="355"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Privacy" Name="Privacy">
-                <Grid Width="660" x:Name="PrivacyGrid">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="PrivacyStack0" Height="470" Margin="6,5,0,0" HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="PrivacyStack1" Height="470" Margin="0,5,6,0" HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Security" Name="Security">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="SecurityStack0" Margin="6,5,0,0" Height="390"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="SecurityStack1" Margin="0,5,6,0" Height="390"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Server" Name="Server">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="ServerStack0" Margin="6,5,0,0" Height="125"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="ServerStack1" Margin="0,5,6,0" Height="125"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Service" Name="Service">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="ServiceStack0" Margin="6,5,0,0" Height="510"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="ServiceStack1" Margin="0,5,6,0" Height="510"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Unpinning" Name="Unpinning">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="UnpinningStack0" Margin="6,5,0,0" Height="50"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="UnpinningStack1" Margin="0,5,6,0" Height="50"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="UWP" Name="UWP">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="UWPStack0" Margin="6,5,0,0" Height="320"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="UWPStack1" Margin="0,5,6,0" Height="320"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-            <TabItem Header="Windows UI" Name="WindowsUI">
-                <Grid Width="660">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320"/>
-                        <ColumnDefinition Width="320"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel x:Name="WindowsUIStack0" Margin="6,5,0,0" Height="815"  HorizontalAlignment="Left" Grid.Column="0"/>
-                    <StackPanel x:Name="WindowsUIStack1" Margin="0,5,6,0" Height="815"  HorizontalAlignment="Left" Grid.Column="1"/>
-                </Grid>
-            </TabItem>
-        </TabControl>
-    </StackPanel>
+            </ScrollViewer>
+        </Grid>
+        <Border Grid.Row="3" Background="#FFF6F6F6" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="14,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="SummaryText" Grid.Column="0" FontSize="12" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="SaveAsFileButton" Width="90" Height="26" FontSize="12" Content="Save As File" Click="SaveAsFileButton_Click" Background="White" ToolTip="Save the selections as a .preset file"/>
+                    <Button x:Name="SaveSettingsButton" Width="100" Height="26" FontSize="12" Content="Save Settings" Margin="8,0,0,0" Click="GetRadioButtonsStatus_Click" Background="White" ToolTip="Use these selections for the debloat during installation"/>
+                    <Button x:Name="DebloatButton" Width="100" Height="26" Content="Debloat Now" Margin="8,0,0,0" Click="DebloatButton_Click" Style="{StaticResource PrimaryButton}" ToolTip="Apply the selected options to this system now"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
 </Window>

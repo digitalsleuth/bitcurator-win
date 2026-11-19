@@ -4,10 +4,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BitCuratorWIN"
         mc:Ignorable="d"
-        Title="BitCurator Installer for Windows" SizeToContent="Height" Width="495"
-        ResizeMode="CanMinimize" SnapsToDevicePixels="True" UseLayoutRounding="True"
-        WindowStartupLocation="CenterScreen">
+        Title="BitCurator-WIN" Width="575" Height="642" MinWidth="575" MinHeight="642"
+        ResizeMode="CanResize" SnapsToDevicePixels="True"
+        UseLayoutRounding="True" WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style x:Key="HoverButton" TargetType="Button">
             <Setter Property="Background" Value="DarkRed"/>
@@ -22,7 +23,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="2">
+                            CornerRadius="{StaticResource ButtonCornerRadius}">
                             <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True"/>
@@ -41,18 +42,99 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="TextAlignLeft" TargetType="CheckBox">
+            <Style.Resources>
+                <Style TargetType="Path">
+                    <Setter Property="FlowDirection" Value="LeftToRight" />
+                </Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="FlowDirection" Value="LeftToRight" />
+                </Style>
+            </Style.Resources>
+            <Setter Property="FlowDirection" Value="RightToLeft" />
+        </Style>
     </Window.Resources>
     <DockPanel>
         <Menu DockPanel.Dock="Top" Background="White" FontSize="12">
+            <Menu.Resources>
+                <ControlTemplate x:Key="MenuHeaderTemplate" TargetType="MenuItem">
+                    <Border x:Name="headerBorder" Background="Transparent" Padding="6,3">
+                        <Grid>
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" PlacementTarget="{Binding ElementName=headerBorder}" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                <Border Background="White" BorderBrush="#FFCCCCCC" BorderThickness="1" Padding="0,2">
+                                    <ItemsPresenter Grid.IsSharedSizeScope="True" KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="headerBorder" Property="Background" Value="{StaticResource AccentTintBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="headerBorder" Property="Background" Value="{StaticResource AccentTintBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+                <ControlTemplate x:Key="MenuEntryTemplate" TargetType="MenuItem">
+                    <Border x:Name="entryBorder" Background="Transparent" Padding="0,4" SnapsToDevicePixels="True">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuEntryGesture"/>
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter ContentSource="Icon" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" Margin="4,0,24,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}" Margin="0,0,12,0" Foreground="#FF6E6E6E" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="entryBorder" Property="Background" Value="{StaticResource AccentTintBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+                <ControlTemplate x:Key="MenuTopItemTemplate" TargetType="MenuItem">
+                    <Border x:Name="topBorder" Background="Transparent" Padding="6,3">
+                        <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="topBorder" Property="Background" Value="{StaticResource AccentTintBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+                <Style TargetType="MenuItem">
+                    <Setter Property="Template" Value="{StaticResource MenuEntryTemplate}"/>
+                    <Style.Triggers>
+                        <Trigger Property="Role" Value="TopLevelItem">
+                            <Setter Property="Template" Value="{StaticResource MenuTopItemTemplate}"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter Property="Template" Value="{StaticResource MenuHeaderTemplate}"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Menu.Resources>
             <MenuItem Header="_File" x:Name="FileMenu">
                 <MenuItem Header="_Load custom state..." x:Name="LoadCustom" Click="FileLoadClick" InputGestureText="Ctrl+L">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8E5;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8E5;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="_Save custom state..." x:Name="SaveCustom" Click="FileSaveClick" InputGestureText="Ctrl+S">
+                <MenuItem Header="_Save custom state..." x:Name="SaveCustom" Click="FileSaveClickCustom" InputGestureText="Ctrl+S">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74E;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74E;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Save _offline state..." x:Name="SaveOffline" Click="FileSaveClickOffline" InputGestureText="Ctrl+O">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74E;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
@@ -61,133 +143,216 @@
             <MenuItem Header="_View" x:Name="ViewMenu">
                 <MenuItem Header="Clear Console" x:Name="ClearConsoleOption" Click="ClearConsole" InputGestureText="Ctrl+Shift+X">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xED60;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xED60;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Results" x:Name="ResultsOutput" Click="ResultsButton_Click" InputGestureText="Ctrl+Shift+R">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8BC;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8BC;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Save Console Output" x:Name="SaveConsole" Click="SaveConsoleOutput" InputGestureText="Ctrl+Shift+S">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xEA35;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xEA35;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Tools" x:Name="ToolsMenu">
                 <MenuItem Header="_Download Tool List" x:Name="ToolListOption" Click="DownloadToolList" ToolTip="This will download the PDF tool list from the GitHub Repo" InputGestureText="Ctrl+T">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE896;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE896;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Generate Start Menu _Layout" x:Name="LocalLayoutOption" Click="LocalLayoutClick" ToolTip="This will generate a Start Menu Layout based on the selected items" InputGestureText="Ctrl+Shift+L">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8FC;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8FC;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Download Theme Template" x:Name="ThemeTemplateOption" Click="DownloadThemeTemplate" ToolTip="Download a zip file containing everything you need to build a custom theme">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE771;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE771;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="_Find a Tool" x:Name="FindTool" Click="FindFunction" ToolTip="Search for a tool" InputGestureText="Ctrl+F">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE773;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE773;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="Switch to _Offline mode" x:Name="OfflineModeOption" Click="ToggleOfflineMode" ToolTip="Switch between Online and Offline mode without changing your network connection.&#x0a;Offline mode loads the local layout.json and changes Install to Install Offline.">
+                    <MenuItem.Icon>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE774;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <TextBlock x:Name="CheckUncheckTextBox" Text="Uncheck All" FontSize="12" Cursor="Hand" MouseLeftButtonDown="CheckUncheckAll_Click" ToolTip="Check / Uncheck All"/>
-            <TextBlock x:Name="ExpandCollapseTextBox" Text="Expand All" FontSize="12" Cursor="Hand" MouseLeftButtonDown="ExpandCollapse_Click" ToolTip="Expand / Collapse All"/>
             <MenuItem Header="_Help" x:Name="HelpMenu">
                 <MenuItem Header="Check for _Updates" x:Name="CheckForUpdates" Click="CheckUpdates" InputGestureText="Ctrl+U">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE895;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE895;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Check GitHub for latest version" x:Name="CheckLatestBitCurator" Click="ShowLatestRelease" InputGestureText="Ctrl+G">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xEDE4;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xEDE4;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="Show installed _version" x:Name="CheckBitCuratorVersion" Click="CheckDistroVersion" InputGestureText="Ctrl+Shift+V">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xEE57;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xEE57;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="About" x:Name="ShowAboutBox" Click="ShowAbout" InputGestureText="Ctrl+Shift+A">
                     <MenuItem.Icon>
-                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE897;" FontSize="15" Foreground="#FF1644B9" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE897;" FontSize="15" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-
         </Menu>
-        <Grid Margin="5,5,0,0" ShowGridLines="False" Height="Auto">
+        <Border DockPanel.Dock="Bottom" Background="#FFF6F6F6" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="8,3">
+            <DockPanel>
+                <TextBlock x:Name="LayoutSourceText" DockPanel.Dock="Right" FontSize="11" Foreground="#FF666666" VerticalAlignment="Center"/>
+                <Label x:Name="TimerLabel" DockPanel.Dock="Right" Content="" Padding="0" MinWidth="56" Margin="0,0,14,0" FontSize="11" Foreground="#FF666666" HorizontalContentAlignment="Right" VerticalAlignment="Center"/>
+                <Border x:Name="NetworkChip" DockPanel.Dock="Left" CornerRadius="9" Padding="8,1" Background="#FFDFF6DD" HorizontalAlignment="Left" Cursor="Hand" ToolTipService.ShowOnDisabled="True" MouseLeftButtonUp="ToggleOfflineMode">
+                    <TextBlock x:Name="NetworkChipText" Text="Online" FontSize="11" Foreground="#FF0F5B1C"/>
+                </Border>
+                <TextBlock x:Name="SelectionSummary" Margin="12,0,0,0" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+        </Border>
+        <Grid Margin="12,8,12,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="390*"/>
-                <ColumnDefinition Width="100*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition Height="200*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <!-- Tool List -->
-            <TreeView Grid.Column="0" Grid.Row="0" x:Name="AllTools" Margin="6,0,0,0" Width="365" Height="281" VerticalAlignment="Top" VerticalContentAlignment="Center" FontSize="13.5" BorderBrush="{x:Null}" HorizontalAlignment="Left"/>
-            <!-- Installation Options and Search -->
-            <Button x:Name="InstallButton" Grid.Column="1" Grid.Row="0" Content="Install" HorizontalAlignment="Left" Margin="10,3,0,0" VerticalAlignment="Top" VerticalContentAlignment="Center" Width="75" Height="24" FontSize="12" Click="InstallClick" ToolTip="Will install the chosen tools / environment" IsEnabled="True" IsTabStop="True" TabIndex="6" Background="White" BorderBrush="#7eb4ea" />
-            <Button x:Name="DownloadButton" Grid.Column="1" Grid.Row="0" Content="Download" HorizontalAlignment="Left" Margin="10,33,0,0" VerticalAlignment="Top" VerticalContentAlignment="Center" Width="75" Height="24" FontSize="12" Click="DownloadOnly" ToolTip="Download the current files only, no installation.&#x0a;DOES NOT INCLUDE Python 2/3 Tools, WinDbg,&#x0a;or Windows Sandbox" IsTabStop="True" TabIndex="5" Background="White" BorderBrush="#7eb4ea"/>
-            <Button x:Name="InstallWslButton" Grid.Column="1" Grid.Row="0" Content="WSL Only" HorizontalAlignment="Left" Margin="10,63,0,0" VerticalAlignment="Top" VerticalContentAlignment="Center" Width="75" Height="24" FontSize="12" Click="InstallWslOnly" ToolTip="Will only install the WSLv2 Environment with SIFT and REMnux" IsEnabled="True" IsTabStop="True" TabIndex="7" Background="White" BorderBrush="#7eb4ea" />
-            <Button x:Name="DebloatButton" Grid.Column="1" Grid.Row="0" Content="Debloat" HorizontalAlignment="Left" Margin="10,93,0,0" VerticalAlignment="Top" VerticalContentAlignment="Center" Width="75" Height="24" FontSize="12" Click="ShowDebloatOptions" ToolTip="View / Set / Disable Windows Debloat Options" IsTabStop="True" TabIndex="9" Background="White" BorderBrush="#7eb4ea"/>
-            <TextBox x:Name="SearchBox" Grid.Column="1" Grid.Row="0" HorizontalAlignment="Left" Margin="10,123,0,0" TextWrapping="NoWrap" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" VerticalAlignment="Top" Width="75" Height="24" FontSize="12" IsEnabled="True" IsTabStop="True" TabIndex="10" ToolTip="Search for a tool." TextChanged="SearchBoxTextChanged" GotFocus="SearchBox_GotFocus" LostFocus="SearchBox_LostFocus" />
-            <TextBlock Name="SearchBoxPlaceholder" Grid.Column="1" Grid.Row="0" HorizontalAlignment="Left" Margin="13,126,0,0" FontSize="12" FontStyle="Italic" Text="Search" Foreground="Gray" VerticalAlignment="Top" IsHitTestVisible="False" />
-            <Grid Grid.Column="1" Margin="10,153,0,0" Grid.Row="0" VerticalAlignment="Top">
-                <Grid.ColumnDefinitions >
-                    <ColumnDefinition Width="22"/>
-                    <ColumnDefinition Width="2"/>
-                    <ColumnDefinition Width="22"/>
-                    <ColumnDefinition Width="2"/>
-                    <ColumnDefinition Width="22"/>
+            <!-- Search -->
+            <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,10,6" KeyboardNavigation.TabIndex="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Button x:Name="NextResultBtn" Grid.Column="0" Content="&#xE893;" Height="22" FontFamily="Segoe MDL2 Assets" FontSize="12" FontWeight="Normal" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="NextResult" Foreground="#FF1644B9" Background="White" BorderThickness="1" BorderBrush="#7eb4ea" ToolTip="Next Search Result"/>
-                <Button x:Name="PreviousResultBtn" Grid.Column="2" Content="&#xE892;" Height="22" FontFamily="Segoe MDL2 Assets" FontSize="12" FontWeight="Normal" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="PreviousResult" Foreground="#FF1644B9" Background="White" BorderThickness="1" BorderBrush="#7eb4ea" ToolTip="Previous Search Result"/>
-                <Button x:Name="ClearSearchBtn" Grid.Column="4" Content="&#xE74D;" Height="22" FontFamily="Segoe MDL2 Assets" FontSize="14" FontWeight="Normal" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="ClearSearch" Foreground="#FFE5424B" Background="White" BorderThickness="1" BorderBrush="#7eb4ea" ToolTip="Clear Search Box and Results"/>
+                <TextBox x:Name="SearchBox" Grid.Column="0" Height="26" FontSize="12" VerticalContentAlignment="Center" local:Placeholder.Text="Search all tools" ToolTip="Search for a tool (Ctrl+F).&#x0a;Enter and Shift+Enter step through the results, Esc clears the search." TextChanged="SearchBoxTextChanged" PreviewKeyDown="SearchBox_PreviewKeyDown"/>
+                <Button x:Name="PreviousResultBtn" Grid.Column="1" Margin="4,0,0,0" Style="{StaticResource IconButton}" Content="&#xE892;" Click="PreviousResult" IsTabStop="False" ToolTip="Previous Search Result"/>
+                <Button x:Name="NextResultBtn" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE893;" Click="NextResult" IsTabStop="False" ToolTip="Next Search Result"/>
+                <Button x:Name="ClearSearchBtn" Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE711;" Foreground="#FFE5424B" Click="ClearSearch" IsTabStop="False" ToolTip="Clear Search Box and Results"/>
+                <TextBlock x:Name="SearchCountText" Grid.Column="4" Margin="8,0,0,0" MinWidth="64" FontSize="11" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" TextAlignment="Left"/>
             </Grid>
-            <Image x:Name="BC_Logo" Grid.Column="1" HorizontalAlignment="Left" Height="88" Margin="10,183,0,0" VerticalAlignment="Top" Width="75" Source="/img/bcwhite.png" ToolTip="Visit us on GitHub!&#x0a;https://github.com/bitcurator" />
-            <!-- Optional Installation Options -->
-            <Label x:Name="UserNameLabel" Grid.Row="1" Target="{Binding ElementName=UserName}" Content="Username:" Height="24" Width="68" Margin="0,8,0,0" FontSize="12" HorizontalAlignment="Left" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" VerticalAlignment="Top" ToolTip="Enter the username for whom to install and customize the environment.&#x0a;If the user does not exist, it will be created" />
-            <TextBox x:Name="UserName" Grid.Row="1" Width="90" Height="22" FontSize="12" HorizontalAlignment="Left" Margin="76,10,0,0" TextWrapping="Wrap" VerticalContentAlignment="Center" VerticalAlignment="Top" IsTabStop="True" TabIndex="13" GotFocus="UserName_GotFocus" LostFocus="UserName_LostFocus"/>
-            <TextBlock Name="UserNamePlaceholder" Grid.Row="1" HorizontalAlignment="Left" Margin="79,13,0,0" Text="" Foreground="Gray" VerticalAlignment="Top" IsHitTestVisible="False" FontSize="12" FontStyle="Italic" />
-            <CheckBox x:Name="themed" Grid.Row="1" Content="Themed" Height="17" Width="68" FontSize="12" Margin="3,42,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" IsChecked="False" Checked="EnableTheme" Unchecked="DisableTheme" ToolTip="This adds theme customization, Start Menu layout, and distro-specific Wallpaper and icons." IsTabStop="True" TabIndex="11"/>
-            <ComboBox x:Name="Theme" Grid.Row="1" HorizontalAlignment="Left" Margin="76,38,0,0" FontSize="12" VerticalAlignment="Top" Width="90" MaxDropDownHeight="479" Height="22" TabIndex="27" IsEnabled="False" Loaded="CheckAllBtn" SelectionChanged="ThemeComboBox_SelectionChanged">
-                <ComboBoxItem Content="BitCurator" x:Name="cpcwin" />
-                <ComboBoxItem Content="Custom" x:Name="custom" />
-            </ComboBox>
-            <Label x:Name="HostNameLabel" Grid.Row="1" Target="{Binding ElementName=HostName}" Content="Hostname:" Height="24" Width="67" Margin="0,64,0,0" FontSize="12" HorizontalContentAlignment="Right" HorizontalAlignment="Left" VerticalContentAlignment="Center" VerticalAlignment="Top" ToolTip="Enter the hostname you would like for your installation.&#x0a;If nothing is selected, the current hostname will be used." IsEnabled="False"/>
-            <TextBox x:Name="HostName" Grid.Row="1" Width="90" Height="22" FontSize="10" Margin="76,66,0,0" TextWrapping="Wrap" VerticalContentAlignment="Center" HorizontalAlignment="Left" HorizontalContentAlignment="Left" VerticalAlignment="Top" IsEnabled="False" GotFocus="HostName_GotFocus" LostFocus="HostName_LostFocus"/>
-            <TextBlock Name="HostNamePlaceholder" Grid.Row="1" Margin="78,69,0,0" Text="" FontStyle="Italic" HorizontalAlignment="Left" Foreground="Gray" VerticalAlignment="Top" IsHitTestVisible="False" />
-            <CheckBox x:Name="WSL" Grid.Row="1" Content="Add WSL" FontSize="12" Height="20" Width="72" Margin="3,95,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" VerticalContentAlignment="Center" IsChecked="False" ToolTip="Select this option if you wish to install the Windows Subsystem for Linux v2 with BitCurator" IsTabStop="True" TabIndex="12"/>
-            <!-- File Locations and Configuration -->
-            <Label x:Name="StandalonesLabel" Grid.Row="1" Target="{Binding ElementName=StandalonesPath}" Margin="186,8,0,0" FontSize="12" Height="24" Width="113" Content="Standalones Path:" HorizontalAlignment="Left" VerticalContentAlignment="Center" VerticalAlignment="Top" ToolTip="Choose where the standalone tools will be installed on your system.&#x0a;If left blank, the default is C:\standalone" />
-            <Button x:Name="StandalonesPickerBtn" Grid.Row="1" Grid.Column="1" Content="&#xED25;" FontFamily="Segoe MDL2 Assets" FontSize="15" FontWeight="Normal" Height="22" Width="22" Margin="45,10,0,0" Foreground="#FF1644B9" HorizontalAlignment="Left" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Top" Click="StandalonesPicker" Background="White" BorderBrush="White" IsTabStop="False" />
-            <TextBox x:Name="StandalonesPath" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="299,10,0,0" Width="120" Height="22" FontSize="12" TextWrapping="NoWrap" HorizontalContentAlignment="Left" VerticalContentAlignment="Center" VerticalAlignment="Top" IsEnabled="True" IsTabStop="True" TabIndex="14" ToolTip="Choose where the standalone tools will be installed on your system.&#x0a;If left blank, the default is C:\standalone" GotFocus="StandalonesPath_GotFocus" LostFocus="StandalonesPath_LostFocus"/>
-            <TextBlock Name="StandalonesPlaceholder" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="302,13,0,0" Text="C:\standalone" FontSize="12" FontStyle="Italic" Foreground="Gray" VerticalAlignment="Top" IsHitTestVisible="False" />
-            <Label x:Name="DownloadsLabel" Grid.Row="1" Target="{Binding ElementName=DownloadsPath}" Content="Downloads Path:" FontSize="12" Margin="186,37,0,0" Height="24" Width="113" HorizontalAlignment="Left" VerticalContentAlignment="Center" VerticalAlignment="Top" ToolTip="If selecting the 'Download' option,&#x0a;use this to choose where the files will be downloaded.&#x0a;If left blank, the default is C:\bc-downloads" />
-            <Button x:Name="DownloadsPickerBtn" Grid.Row="1" Grid.Column="1"  Content="&#xED25;" FontFamily="Segoe MDL2 Assets" FontSize="15" FontWeight="Normal" Height="22" Width="22" Margin="45,38,0,0" Foreground="#FF1644B9" HorizontalAlignment="Left" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Top" Click="DownloadsPicker" BorderBrush="White" Background="White" IsTabStop="False" />
-            <TextBox x:Name="DownloadsPath" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="299,38,0,0" Width="120" Height="22" FontSize="12" TextWrapping="NoWrap" VerticalContentAlignment="Center" VerticalAlignment="Top" IsEnabled="True" IsTabStop="True" TabIndex="15" ToolTip="If selecting the 'Download' option,&#x0a;use this to choose where the files will be downloaded.&#x0a;If left blank, the default is C:\bc-downloads" GotFocus="DownloadsPath_GotFocus" LostFocus="DownloadsPath_LostFocus"/>
-            <TextBlock Name="DownloadsPlaceholder" Grid.Row="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="302,41,0,0" FontSize="12" FontStyle="Italic" Text="C:\bc-downloads" Foreground="Gray" VerticalAlignment="Top" IsHitTestVisible="False" />
+            <!-- Tool List -->
+            <Border x:Name="ToolListFrame" Grid.Row="1" Grid.Column="0" Height="282" VerticalAlignment="Top" Margin="0,0,10,0" Background="White" BorderBrush="{StaticResource DividerBrush}" BorderThickness="1" CornerRadius="6" KeyboardNavigation.TabIndex="2">
+                <TreeView x:Name="AllTools" BorderThickness="0" Background="Transparent" FontSize="13.5" KeyboardNavigation.TabIndex="2" SizeChanged="AllTools_SizeChanged"/>
+            </Border>
+            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,6,10,0" KeyboardNavigation.TabIndex="3">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button x:Name="CheckUncheckBtn" Style="{StaticResource LinkButton}" Click="CheckUncheckAll_Click" ToolTip="Check / Uncheck All"><TextBlock x:Name="CheckUncheckTextBox" Text="Uncheck All"/></Button>
+                    <Button x:Name="ExpandCollapseBtn" Style="{StaticResource LinkButton}" Click="ExpandCollapse_Click" ToolTip="Expand / Collapse All"><TextBlock x:Name="ExpandCollapseTextBox" Text="Expand All"/></Button>
+                </StackPanel>
+            </StackPanel>
+            <!-- Actions -->
+            <Grid x:Name="ActionColumn" Grid.Row="1" Grid.Column="1" Width="160" KeyboardNavigation.TabIndex="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="6"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="6"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="6"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="6"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="6"/>
+                    <RowDefinition Height="87"/>
+                </Grid.RowDefinitions>
+                <Button x:Name="InstallButton" Grid.Row="0" Content="Install" Height="28" Style="{StaticResource PrimaryButton}" Click="InstallClick" ToolTip="Will install the chosen tools / environment"/>
+                <Button x:Name="DownloadButton" Grid.Row="2" Content="Download" Height="28" FontSize="12" Background="White" Click="DownloadOnly" ToolTip="Download the current files only, no installation."/>
+                <Button x:Name="OfflineButton" Grid.Row="4" Content="Stage for Offline Install" Height="28" FontSize="12" Background="White" Click="OfflineDownload" ToolTip="Download the selected files and stage them, with an offline state,&#x0a; to be installed on a system without network access."/>
+                <Border Grid.Row="5" Height="1" VerticalAlignment="Center" Background="{StaticResource DividerBrush}"/>
+                <Button x:Name="DebloatButton" Grid.Row="6" Content="Debloat" Height="28" FontSize="12" Background="White" Click="ShowDebloatOptions" ToolTip="View / Set / Disable Windows Debloat Options"/>
+                <Button x:Name="InstallWslButton" Grid.Row="8" Content="WSL Only" Height="28" FontSize="12" Background="White" Click="InstallWslOnly" ToolTip="Will only install the WSLv2 Environment.&#x0a;Select the WSL option and choose BitCurator-24 or BitCurator-26 from the dropdown at the bottom first,&#x0a;otherwise the default will be installed."/>
+                <!-- Reserved 160 x 87 slot (ActionColumn Width and its last RowDefinition, row 10) so the buttons stay put. Put your own content here -->
+            </Grid>
+            <!-- Options -->
+            <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,10,0,0" Grid.IsSharedSizeScope="True">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,4,0" KeyboardNavigation.TabIndex="5">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow0"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow1"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow2"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow3"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow4"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="System" Style="{StaticResource CardTitle}"/>
+                        <Label x:Name="UserNameLabel" Grid.Row="1" Target="{Binding ElementName=UserName}" Content="Username:" Padding="0" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6" ToolTip="Enter the username for whom to install and customize the environment.&#x0a;If the user does not exist, it will be created"/>
+                        <TextBox x:Name="UserName" Grid.Row="1" Grid.Column="1" Height="24" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6" TextChanged="Field_TextChanged"/>
+                        <CheckBox x:Name="themed" Grid.Row="2" Content="Themed" FontSize="12" VerticalContentAlignment="Center" VerticalAlignment="Center" IsChecked="False" Margin="0,0,0,6" Checked="EnableTheme" Unchecked="DisableTheme" ToolTip="This adds theme customization, Start Menu layout, and distro-specific Wallpaper and icons."/>
+                        <ComboBox x:Name="Theme" Grid.Row="2" Grid.Column="1" Height="24" FontSize="12" Margin="0,0,0,6" IsEnabled="False" MaxDropDownHeight="479" SelectionChanged="ThemeComboBox_SelectionChanged" IsEnabledChanged="ThemeComboBox_EnableChanged">
+                            <ComboBoxItem Content="BitCurator" x:Name="bitcurator" />
+                            <ComboBoxItem Content="Custom" x:Name="custom" />
+                        </ComboBox>
+                        <Label x:Name="HostNameLabel" Grid.Row="3" Target="{Binding ElementName=HostName}" Content="Hostname:" Padding="0" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6" IsEnabled="False"/>
+                        <TextBox x:Name="HostName" Grid.Row="3" Grid.Column="1" Height="24" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6" IsEnabled="False" TextChanged="Field_TextChanged"/>
+                        <CheckBox x:Name="WSL" Grid.Row="4" Content="WSL" FontSize="12" VerticalContentAlignment="Center" VerticalAlignment="Center" IsChecked="False" Checked="EnableWsl" Unchecked="DisableWsl"/>
+                        <ComboBox x:Name="WSLChoice" Grid.Row="4" Grid.Column="1" Height="24" FontSize="12" IsEnabled="False" MaxDropDownHeight="479" SelectionChanged="WslComboBox_SelectionChanged" IsEnabledChanged="WslComboBox_EnableChanged">
+                            <ComboBoxItem Content="BitCurator-24" x:Name="bitcurator24" />
+                            <ComboBoxItem Content="BitCurator-26" x:Name="bitcurator26" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="4,0,0,0" Padding="10,8,2,8" KeyboardNavigation.TabIndex="6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow0"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow1"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow2"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow3"/>
+                            <RowDefinition Height="Auto" SharedSizeGroup="OptionsRow4"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Locations" Style="{StaticResource CardTitle}"/>
+                        <Label x:Name="StandalonesLabel" Grid.Row="1" Grid.ColumnSpan="2" Target="{Binding ElementName=StandalonesPath}" Content="Standalones path:" Padding="0" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6"/>
+                        <TextBox x:Name="StandalonesPath" Grid.Row="2" Grid.Column="0" Height="24" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6" TextChanged="Field_TextChanged"/>
+                        <Button x:Name="StandalonesPickerBtn" Grid.Row="2" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xED25;" Height="24" Margin="4,0,0,6" IsTabStop="False" Click="StandalonesPicker" ToolTip="Browse for a folder"/>
+                        <Label x:Name="DownloadsLabel" Grid.Row="3" Grid.ColumnSpan="2" Target="{Binding ElementName=DownloadsPath}" Content="Downloads path:" Padding="0" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,0,6"/>
+                        <TextBox x:Name="DownloadsPath" Grid.Row="4" Grid.Column="0" Height="24" FontSize="12" VerticalContentAlignment="Center" TextChanged="Field_TextChanged"/>
+                        <Button x:Name="DownloadsPickerBtn" Grid.Row="4" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xED25;" Height="24" Margin="4,0,0,0" IsTabStop="False" Click="DownloadsPicker" ToolTip="Browse for a folder"/>
+                    </Grid>
+                </Border>
+            </Grid>
             <!-- Output and Results -->
-            <Expander x:Name="OutputExpander" HorizontalAlignment="Left" Width="479" Height="Auto" Header="Output" Margin="2,123,0,10" Grid.Row="1" Grid.ColumnSpan="2" VerticalAlignment="Top" IsExpanded="False" IsEnabled="True" IsTabStop="False">
-                <TextBox x:Name="OutputConsole" HorizontalAlignment="Left" Width="459" Height="250" Margin="2,4,0,10" Grid.Row="1" Grid.ColumnSpan="2" TextWrapping="Wrap" FontSize="11" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" IsReadOnly="True" IsTabStop="False"/>
+            <Expander x:Name="OutputExpander" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0" IsExpanded="False" IsEnabled="True" IsTabStop="False" FocusVisualStyle="{x:Null}" KeyboardNavigation.TabIndex="8" Expanded="OutputExpander_Changed" Collapsed="OutputExpander_Changed">
+                <Expander.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Output" FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <Button x:Name="ClearOutput" Style="{StaticResource IconButton}" FontSize="15" Content="&#xED60;" Click="ClearConsole" ToolTip="Clear the content of the Console Window." IsTabStop="False"/>
+                        <Button x:Name="SaveOutputButton" Style="{StaticResource IconButton}" FontSize="15" Content="&#xEA35;" Click="SaveConsoleOutput" ToolTip="Save the content of the Console Window." IsTabStop="False"/>
+                        <Button x:Name="ResultsButton" Style="{StaticResource IconButton}" Content="&#xE8BC;" Click="ResultsButton_Click" ToolTip="View Results of recent installation or download attempts."/>
+                        <Button x:Name="StopButton" Style="{StaticResource HoverButton}" Margin="8,0,0,0" Height="18" Width="18" FontSize="12" FontFamily="Segoe MDL2 Assets" Content="&#xE71A;" VerticalContentAlignment="Center" Click="StopSaltStack_Click" BorderBrush="DarkRed" BorderThickness="2" ToolTip="Stop the currently executing SaltStack process." IsEnabled="False" Visibility="Hidden"/>
+                    </StackPanel>
+                </Expander.Header>
+                <TextBox x:Name="OutputConsole" MinHeight="80" Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" IsReadOnly="True" IsTabStop="False"/>
             </Expander>
-            <Button x:Name="ClearOutput" Grid.Row="1" Margin="77,123,0,0" FontSize="15" FontWeight="Normal" Height="22" Width="22" FontFamily="Segoe MDL2 Assets" Content="&#xED60;" Foreground="#FF1644B9" HorizontalAlignment="Left" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Top" Click="ClearConsole" BorderBrush="White" Background="White" ToolTip="Clear the content of the Console Window." IsTabStop="False" />
-            <Button x:Name="SaveOutputButton" Grid.Row="1" Margin="103,123,0,0" FontSize="15" FontWeight="Normal" Height="22" Width="22" FontFamily="Segoe MDL2 Assets" Content="&#xEA35;" Foreground="#FF1644B9" HorizontalAlignment="Left" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Top" Click="SaveConsoleOutput" BorderBrush="White" Background="White" ToolTip="Save the content of the Console Window." IsTabStop="False" />
-            <Button x:Name="ResultsButton" Grid.Row="1" Margin="130,124,0,0" Height="22" Width="22" FontSize="14" FontFamily="Segoe MDL2 Assets" Content="&#xE8BC;" Foreground="#FF1644B9" HorizontalAlignment="Left" VerticalAlignment="Top" VerticalContentAlignment="Center" Click="ResultsButton_Click" BorderBrush="White" Background="White" ToolTip="View Results of recent installation or download attempts." IsTabStop="True" TabIndex="9" />
-            <Button x:Name="StopButton" Grid.Row="1" Margin="160,126,0,0" Height="18" Width="18" FontSize="12" FontFamily="Segoe MDL2 Assets" Content="&#xE71A;" Style="{StaticResource HoverButton}" HorizontalAlignment="Left" VerticalAlignment="Top" VerticalContentAlignment="Center" Click="StopSaltStack_Click" BorderBrush="DarkRed" BorderThickness="2" ToolTip="Stop the currently executing SaltStack process." IsTabStop="True" TabIndex="10" IsEnabled="False" Visibility="Hidden"/>
-            <Label x:Name="TimerLabel" Grid.Row="1" Content="" HorizontalAlignment="Left" Margin="6,122,0,0" VerticalAlignment="Top" Width="84" VerticalContentAlignment="Top" HorizontalContentAlignment="Right" Height="24" Grid.Column="1"/>
-            <!--<Button x:Name="TestButton" Grid.Row="1" Content="👍" Margin="151,121,0,0" FontSize="15" FontWeight="Normal" Height="24" Width="22" Foreground="#FF1644B9" HorizontalAlignment="Left" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" VerticalAlignment="Top" Click="TestButton_Click" BorderBrush="Transparent" Background="White" IsTabStop="False" />-->
+            <Image x:Name="BC_Logo" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" HorizontalAlignment="Right" VerticalAlignment="Top" Width="24" Height="24" Margin="0,11,0,0" Source="/img/bcwhite.png" RenderOptions.BitmapScalingMode="HighQuality" Cursor="Hand" MouseLeftButtonUp="Logo_Click"/>
         </Grid>
     </DockPanel>
 </Window>
