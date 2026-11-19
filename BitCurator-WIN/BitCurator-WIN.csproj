@@ -17,7 +17,7 @@
     <FileVersion>$(Version)</FileVersion>
     <Authors>Corey Forman (digitalsleuth)</Authors>
     <Description>A graphical interface to choose which packages are installed in a BitCurator Windows environment.</Description>
-    <PackageProjectUrl>https://github.com/bitcurator/bitcurator-win</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/digitalsleuth/bitcurator-win</PackageProjectUrl>
     <PackageTags>bitcurator;digitalsleuth</PackageTags>
     <Copyright>Corey Forman (digitalsleuth)</Copyright>
     <Company>digitalsleuth</Company>
